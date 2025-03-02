@@ -10,8 +10,8 @@ export class Server<SocketInfo> {
   private onResponse: (socket: ServerWebSocket<SocketInfo>, request: Response) => any = () => {}
   private onConnect: (socket: ServerWebSocket<SocketInfo>) => any = () => {}
   private onDisconnect: (socket: ServerWebSocket<SocketInfo>) => any = () => {}
-  private makeInfo: (request: globalThis.Request) => SocketInfo
-  constructor(port: number, makeInfo: (request: globalThis.Request) => SocketInfo) {
+  private makeInfo: (request: globalThis.Request) => Promise<SocketInfo>
+  constructor(port: number, makeInfo: (request: globalThis.Request) => Promise<SocketInfo>) {
     this.port = port
     this.makeInfo = makeInfo
   }
@@ -49,8 +49,8 @@ export class Server<SocketInfo> {
     return Bun.serve({
       port: this.port,
       hostname: '127.0.0.1',
-      fetch(req, server) {
-        if (server.upgrade(req, { data: makeInfo(req) })) return
+      async fetch(req, server) {
+        if (server.upgrade(req, { data: await makeInfo(req) })) return
         return new Response()
       },
       websocket: {

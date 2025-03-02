@@ -1,5 +1,8 @@
 import type { ServerWebSocket, Server as BunServer } from 'bun'
 import { Server, type Request, type Response, json } from './server'
+import { Authorization } from './auth.ts'
+const auth = new Authorization()
+
 const defaultHubPort = Number(Bun.env.HUBPORT ?? 1997)
 type Socket = ServerWebSocket<Connection>
 
@@ -10,10 +13,13 @@ export class Hub {
   id = 0
   pending = new ObjectMap<number, string>()
   constructor(port: number = defaultHubPort) {
-    this.server = new Server<Connection>(port, req => ({
-      services: [],
-      requests: 0,
-    }))
+    this.server = new Server<Connection>(port, async req => {
+      return {
+        key: req.headers.get('auth') ?? undefined,
+        services: [],
+        requests: 0,
+      }
+    })
       .connected(ws => this.connected(ws))
       .disconnected(ws => this.disconnected(ws))
       .request((ws, body) => this.request(ws, body))
@@ -29,9 +35,27 @@ export class Hub {
     const { path, body } = request
     switch (path) {
       case 'hub/service/add':
-        ws.data.services = ws.data.services.concat(body)
-        this.addServices(ws, body)
-        ws.send(json({ id: request.id }))
+        // Checking if service has authorization management
+        try {
+          if (!Array.isArray(body)) throw 'invalid command'
+          for (const service of body) {
+            if (service !== 'auth' && !service.startsWith?.('auth/')) continue
+            if (!ws.data.key) throw 'Service have to support authorization'
+            if (auth.auth === ws.data.key) {
+              break
+            } else if (!auth.auth) {
+              auth.auth = ws.data.key
+              break
+            } else {
+              throw 'Hub is using a different authorization service'
+            }
+          }
+          ws.data.services = ws.data.services.concat(body)
+          this.addServices(ws, body)
+          ws.send(json({ id: request.id }))
+        } catch (error) {
+          ws.send(json({ id: request.id, error }))
+        }
         break
       case 'hub/status':
         ws.send(
@@ -113,6 +137,7 @@ class Services {
 }
 
 interface Connection {
+  key?: string
   services: string[]
   requests: number
 }
