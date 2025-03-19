@@ -26,7 +26,7 @@ export class Hub {
       .response((ws, body) => this.response(body))
       .start()
   }
-  connected(ws: Socket) {}
+  connected(ws: Socket) { }
   disconnected(ws: Socket) {
     ws.data.services.forEach(s => this.services.get(s)?.remove(ws))
   }
@@ -41,10 +41,11 @@ export class Hub {
           for (const service of body) {
             if (service !== 'auth' && !service.startsWith?.('auth/')) continue
             if (!ws.data.key) throw 'Service have to support authorization'
-            if (auth.auth === ws.data.key) {
+            const key = ws.data.key.split('.').slice(0, 2).join('.')
+            if (auth.auth === key) {
               break
             } else if (!auth.auth) {
-              auth.auth = ws.data.key
+              auth.auth = key
               break
             } else {
               throw 'Hub is using a different authorization service'
