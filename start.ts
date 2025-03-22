@@ -1,2 +1,2 @@
-import { Hub } from '.'
+import { Hub } from './hub'
 new Hub()
