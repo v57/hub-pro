@@ -18,11 +18,10 @@ export class Hub {
     this.channel
       .post('hub/service/add', ({ body, state, sender }) => {
         if (!Array.isArray(body)) throw 'invalid command'
-        console.log(auth.auth)
         for (const service of body) {
           if (service !== 'auth' && !service.startsWith?.('auth/')) continue
           if (!state.key) throw 'Service have to support authorization'
-          const key = state.key.split('.').slice(0, 2).join('.')
+          const key = auth.verify(state.key)
           if (auth.auth === key) {
             break
           } else if (!auth.auth) {
