@@ -1,6 +1,7 @@
 import { Channel, type Sender, ObjectMap } from 'channel/server'
 import { Authorization } from './auth.ts'
 const auth = new Authorization()
+await auth.load()
 const defaultHubPort = Number(Bun.env.HUBPORT ?? 1997)
 
 interface State {
@@ -17,6 +18,7 @@ export class Hub {
     this.channel
       .post('hub/service/add', ({ body, state, sender }) => {
         if (!Array.isArray(body)) throw 'invalid command'
+        console.log(auth.auth)
         for (const service of body) {
           if (service !== 'auth' && !service.startsWith?.('auth/')) continue
           if (!state.key) throw 'Service have to support authorization'
@@ -25,6 +27,7 @@ export class Hub {
             break
           } else if (!auth.auth) {
             auth.auth = key
+            auth.save()
             break
           } else {
             throw 'Hub is using a different authorization service'
