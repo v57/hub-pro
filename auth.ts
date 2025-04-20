@@ -1,7 +1,9 @@
+import type { Sender } from 'channel/channel'
 import { createPublicKey, verify } from 'crypto'
 
 export class Authorization {
   auth: string | undefined
+  sender?: Sender
   async load() {
     try {
       this.auth = await Bun.file('auth-service').text()
@@ -11,6 +13,11 @@ export class Authorization {
     if (this.auth) {
       await Bun.file('auth-service').write(this.auth)
     }
+  }
+  async permissions(key: string | null): Promise<Set<string>> {
+    if (!key || !this.sender) return new Set()
+    const permissions: string[] = await this.sender.send('auth/verify', key)
+    return new Set(permissions)
   }
   // Returns permissions list
   verify(data: string): string {

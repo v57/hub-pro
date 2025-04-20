@@ -7,6 +7,7 @@ const defaultHubPort = Number(Bun.env.HUBPORT ?? 1997)
 interface State {
   key?: string
   services: string[]
+  permissions: Set<string>
   requests: number
 }
 
@@ -23,10 +24,14 @@ export class Hub {
           if (!state.key) throw 'Service have to support authorization'
           const key = auth.verify(state.key)
           if (auth.auth === key) {
+            auth.sender = sender
+            this.reauthorizeServices()
             break
           } else if (!auth.auth) {
+            auth.sender = sender
             auth.auth = key
             auth.save()
+            this.reauthorizeServices()
             break
           } else {
             throw 'Hub is using a different authorization service'
@@ -45,10 +50,14 @@ export class Hub {
         return await sender.send(path, body)
       })
       .onDisconnect((state, sender) => {
+        if (auth.sender === sender) {
+          delete auth.sender
+        }
         state.services.forEach(s => this.services.get(s)?.remove(sender))
       })
-      .listen(port, headers => ({
+      .listen(port, async headers => ({
         key: headers.get('auth') ?? undefined,
+        permissions: await auth.permissions(headers.get('auth')),
         services: [],
         requests: 0,
       }))
@@ -65,6 +74,15 @@ export class Hub {
       }
       service.add(sender)
       console.log('Service', s, service.services.length)
+    })
+  }
+  async reauthorizeServices() {
+    const unauthorizedSenders = new Set<Sender>()
+    this.services.forEach(a => {
+      a.services.forEach(sender => unauthorizedSenders.add(sender))
+    })
+    unauthorizedSenders.forEach(sender => {
+      sender.stop()
     })
   }
 }
