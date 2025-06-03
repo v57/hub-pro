@@ -40,6 +40,7 @@ export class Hub {
         state.services = state.services.concat(body)
         this.addServices(sender, body)
       })
+      .post('hub/permissions', ({ state }) => state.permissions)
       .post('hub/status', () => ({ requests, services: this.services.map(a => a.status) }))
       .postOther(other, async ({ body }, path) => {
         const service = this.services.get(path)
