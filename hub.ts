@@ -1,4 +1,4 @@
-import { Channel, type Sender, ObjectMap } from 'channel/server'
+import { Channel, LazyState, type Sender, ObjectMap } from 'channel/server'
 import { Authorization } from './auth.ts'
 const auth = new Authorization()
 await auth.load()
@@ -16,6 +16,10 @@ export class Hub {
   services = new ObjectMap<string, Services>()
   channel = new Channel<State>()
   constructor(port: number = defaultHubPort) {
+    const statusState = new LazyState(() => ({
+      requests,
+      services: this.services.map(a => a.status),
+    }))
     this.channel
       .post('hub/service/add', ({ body, state, sender }) => {
         if (!Array.isArray(body)) throw 'invalid command'
@@ -39,15 +43,19 @@ export class Hub {
         }
         state.services = state.services.concat(body)
         this.addServices(sender, body)
+        statusState.setNeedsUpdate()
       })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/status', () => ({ requests, services: this.services.map(a => a.status) }))
+      .lazyStream('hub/status', () => statusState)
       .postOther(other, async ({ body }, path) => {
         const service = this.services.get(path)
         if (!service) throw 'api not found'
         const sender = service.next()
         if (!sender) throw 'api not found'
         service.requests += 1
+        requests += 1
+        statusState.setNeedsUpdate()
         return await sender.send(path, body)
       })
       .onDisconnect((state, sender) => {
@@ -55,6 +63,7 @@ export class Hub {
           delete auth.sender
         }
         state.services.forEach(s => this.services.get(s)?.remove(sender))
+        statusState.setNeedsUpdate()
       })
       .listen(port, async headers => ({
         key: headers.get('auth') ?? undefined,
