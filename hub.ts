@@ -1,4 +1,5 @@
-import { Channel, LazyState, type Sender, ObjectMap } from 'channel/server'
+import { Channel, type Sender, ObjectMap } from 'channel/server'
+import { LazyState } from 'channel/more'
 import { Authorization } from './auth.ts'
 const auth = new Authorization()
 await auth.load()
@@ -47,7 +48,7 @@ export class Hub {
       })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/status', () => ({ requests, services: this.services.map(a => a.status) }))
-      .lazyStream('hub/status', () => statusState)
+      .stream('hub/status', () => statusState.makeIterator())
       .postOther(other, async ({ body }, path) => {
         const service = this.services.get(path)
         if (!service) throw 'api not found'
