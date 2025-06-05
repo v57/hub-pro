@@ -59,6 +59,16 @@ export class Hub {
         statusState.setNeedsUpdate()
         return await sender.send(path, body)
       })
+      .streamOther(other, ({ body }, path) => {
+        const service = this.services.get(path)
+        if (!service) throw 'api not found'
+        const sender = service.next()
+        if (!sender) throw 'api not found'
+        service.requests += 1
+        requests += 1
+        statusState.setNeedsUpdate()
+        return sender.values(path, body)
+      })
       .onDisconnect((state, sender) => {
         if (auth.sender === sender) {
           delete auth.sender
