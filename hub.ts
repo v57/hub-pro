@@ -222,6 +222,6 @@ class Services {
     return this.services.at(id)?.sender
   }
   get status() {
-    return { name: this.name, services: this.services.length, requests: this.requests }
+    return { name: this.name, services: this.services.length, disabled: this.disabled.length, requests: this.requests }
   }
 }
