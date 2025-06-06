@@ -27,24 +27,6 @@ export class Hub {
     this.channel
       .post('hub/service/add', ({ body, state, sender }) => {
         if (!Array.isArray(body)) throw 'invalid command'
-        for (const service of body) {
-          if (service !== 'auth' && !service.startsWith?.('auth/')) continue
-          if (!state.key) throw 'Service have to support authorization'
-          const key = auth.verify(state.key)
-          if (auth.auth === key) {
-            auth.sender = sender
-            this.reauthorizeServices()
-            break
-          } else if (!auth.auth) {
-            auth.sender = sender
-            auth.auth = key
-            auth.save()
-            this.reauthorizeServices()
-            break
-          } else {
-            throw 'Hub is using a different authorization service'
-          }
-        }
         state.services = state.services.concat(body)
         this.addServices(sender, state, body)
         statusState.setNeedsUpdate()
@@ -111,19 +93,16 @@ export class Hub {
   }
   addServices(sender: Sender, state: State, services: string[]) {
     services.forEach(s => {
-      if (this.checkAuthorization(sender, state, s)) return
+      const isAuth = this.checkAuthorization(sender, state, s)
       let service = this.services.get(s)
       if (!service) {
         service = new Services(s)
         this.services.set(s, service)
       }
-      this.addService(sender, state, service)
+      const enabled = isAuth ?? apiPermissions.allowsService(service.name, state.permissions)
+      service.add({ sender, state, enabled })
       console.log('Service', s, service.services.length)
     })
-  }
-  addService(sender: Sender, state: State, service: Services) {
-    const enabled = apiPermissions.allowsService(service.name, state.permissions)
-    service.add({ sender, state, enabled })
   }
   private checkAuthorization(sender: Sender, state: State, service: string) {
     if (service === 'owner' || service.startsWith?.('owner/')) throw 'invalid service'
@@ -132,17 +111,15 @@ export class Hub {
     const key = auth.verify(state.key)
     if (auth.auth === key) {
       auth.sender = sender
-      this.reauthorizeServices()
-      return true
     } else if (!auth.auth) {
       auth.sender = sender
       auth.auth = key
       auth.save()
-      this.reauthorizeServices()
-      return true
     } else {
       throw 'Hub is using a different authorization service'
     }
+    this.reauthorizeServices()
+    return true
   }
   async reauthorizeServices() {
     const unauthorizedSenders = new Set<Sender>()
