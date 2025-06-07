@@ -23,6 +23,7 @@ export class Hub {
     const statusState = new LazyState(() => ({
       requests,
       services: this.services.map(a => a.status),
+      pro: true,
     }))
     this.channel
       .post('hub/service/add', ({ body, state, sender }) => {
@@ -52,7 +53,7 @@ export class Hub {
         }
         if (changes) statusState.setNeedsUpdate()
       })
-      .post('hub/status', () => ({ requests, services: this.services.map(a => a.status) }))
+      .post('hub/status', () => statusState.getValue())
       .stream('hub/status', () => statusState.makeIterator())
       .postOther(other, async ({ body }, path) => {
         const service = this.services.get(path)
