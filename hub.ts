@@ -16,6 +16,11 @@ interface State {
   requests: number
 }
 
+interface PendingAuthorization {
+  id: string
+  pending: string[]
+}
+
 let requests = 0
 export class Hub {
   services = new ObjectMap<string, Services>()
@@ -27,12 +32,29 @@ export class Hub {
       services: this.services.map(a => a.status),
       pro: true,
     }))
+    const pendingAuthorizations = new LazyState<PendingAuthorization[]>(() => {
+      let result: { [key: string]: string[] | undefined } = {}
+      this.services.forEach(s =>
+        s.disabled.forEach(c => {
+          if (c.state.id) {
+            let services = result[c.state.id]
+            if (services) {
+              services.push(s.name)
+            } else {
+              result[c.state.id] = [s.name]
+            }
+          }
+        }),
+      )
+      return Object.entries(result).map(([id, pending]) => ({ id, pending }) as PendingAuthorization)
+    }).delay(1)
     this.channel
       .post('hub/service/add', ({ body, state, sender }) => {
         if (!Array.isArray(body)) throw 'invalid command'
         state.services = state.services.concat(body)
         this.addServices(sender, state, body)
         statusState.setNeedsUpdate()
+        pendingAuthorizations.setNeedsUpdate()
       })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
@@ -43,7 +65,10 @@ export class Hub {
           const s = this.services.get(service)
           if (s) changes += s.addPermission(permission)
         }
-        if (changes) statusState.setNeedsUpdate()
+        if (changes) {
+          statusState.setNeedsUpdate()
+          pendingAuthorizations.setNeedsUpdate()
+        }
       })
       .post('hub/permissions/remove', ({ body: { services, permission }, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
@@ -53,8 +78,12 @@ export class Hub {
           const s = this.services.get(service)
           if (s) changes += s.removePermission(permission)
         }
-        if (changes) statusState.setNeedsUpdate()
+        if (changes) {
+          statusState.setNeedsUpdate()
+          pendingAuthorizations.setNeedsUpdate()
+        }
       })
+      .stream('hub/permissions/pending', () => pendingAuthorizations.makeIterator())
       .post('hub/status', () => statusState.getValue())
       .stream('hub/status', () => statusState.makeIterator())
       .postOther(other, async ({ body }, path) => {
