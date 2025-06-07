@@ -14,13 +14,13 @@ export class Authorization {
       await Bun.file('auth-service').write(this.auth)
     }
   }
-  async permissions(key: string | null): Promise<Set<string>> {
-    if (!key || !this.sender) return new Set()
+  async permissions(key: string | null): Promise<{ id?: string; permissions: Set<string> }> {
+    if (!key || !this.sender) return { permissions: new Set() }
     const verification: { id?: string; permissions: string[] } = await this.sender.send('auth/verify', key)
     if (verification.id) {
       verification.permissions.push(verification.id)
     }
-    return new Set(verification.permissions)
+    return { id: verification.id, permissions: new Set(verification.permissions) }
   }
   // Returns permissions list
   verify(data: string): string {
