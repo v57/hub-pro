@@ -20,7 +20,7 @@ export class Hub {
   services = new ObjectMap<string, Services>()
   channel = new Channel<State>()
   constructor(port: number = defaultHubPort) {
-    const statusState = new LazyState(() => ({
+    const statusState = new LazyState<StatusState>(() => ({
       requests,
       services: this.services.map(a => a.status),
       pro: true,
@@ -199,7 +199,19 @@ class Services {
     const id = this.index++ % this.services.length
     return this.services.at(id)?.sender
   }
-  get status() {
+  get status(): ServicesStatus {
     return { name: this.name, services: this.services.length, disabled: this.disabled.length, requests: this.requests }
   }
+}
+
+interface StatusState {
+  requests: number
+  services: ServicesStatus[]
+  pro?: boolean
+}
+interface ServicesStatus {
+  name: string
+  requests: number
+  services: number
+  disabled: number
 }
