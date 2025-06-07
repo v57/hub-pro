@@ -216,7 +216,7 @@ class Services {
       }
     })
     if (!enabled.size) return 0
-    this.disabled = this.disabled.filter(a => enabled.has(a))
+    this.disabled = this.disabled.filter(a => !enabled.has(a))
     return enabled.size
   }
   removePermission(permission: string): number {
@@ -228,7 +228,7 @@ class Services {
       }
     })
     if (!disabled.size) return 0
-    this.services = this.services.filter(a => disabled.has(a))
+    this.services = this.services.filter(a => !disabled.has(a))
     return disabled.size
   }
   remove(sender: Sender) {
