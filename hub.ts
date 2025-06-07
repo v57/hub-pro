@@ -113,6 +113,9 @@ export class Hub {
         this.connections.delete(state)
         state.services.forEach(s => this.services.get(s)?.remove(sender))
         statusState.setNeedsUpdate()
+        if (sender === auth.sender) {
+          delete auth.sender
+        }
       })
       .listen(port, async headers => {
         const { id, permissions } = await auth.permissions(headers.get('auth'))
@@ -142,11 +145,13 @@ export class Hub {
       service.add({ sender, state, enabled })
       console.log('Service', s, service.services.length)
     })
+    if (state.permissions.has('auth')) this.reauthorizeServices()
   }
   private checkAuthorization(sender: Sender, state: State, service: string) {
     if (service === 'owner' || service.startsWith?.('owner/')) throw 'invalid service'
     if (service !== 'auth' && !service.startsWith?.('auth/')) return false
     if (!state.key) throw 'Service have to support authorization'
+    if (state.permissions.has('auth')) return true
     const key = auth.verify(state.key)
     if (auth.auth === key) {
       auth.sender = sender
@@ -157,14 +162,14 @@ export class Hub {
     } else {
       throw 'Hub is using a different authorization service'
     }
-    this.reauthorizeServices()
+    state.permissions.add('auth')
     return true
   }
   async reauthorizeServices() {
     const unauthorizedSenders = new Set<Sender>()
     this.services.forEach(a => {
-      a.services.forEach(sender => unauthorizedSenders.add(sender.sender))
-      a.disabled.forEach(sender => unauthorizedSenders.add(sender.sender))
+      a.services.forEach(s => !s.state.permissions.has('auth') && unauthorizedSenders.add(s.sender))
+      a.disabled.forEach(s => !s.state.permissions.has('auth') && unauthorizedSenders.add(s.sender))
     })
     unauthorizedSenders.forEach(sender => {
       sender.stop()
