@@ -16,8 +16,11 @@ export class Authorization {
   }
   async permissions(key: string | null): Promise<Set<string>> {
     if (!key || !this.sender) return new Set()
-    const permissions: string[] = await this.sender.send('auth/verify', key)
-    return new Set(permissions)
+    const verification: { id?: string; permissions: string[] } = await this.sender.send('auth/verify', key)
+    if (verification.id) {
+      verification.permissions.push(verification.id)
+    }
+    return new Set(verification.permissions)
   }
   // Returns permissions list
   verify(data: string): string {
