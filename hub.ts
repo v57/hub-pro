@@ -19,6 +19,7 @@ let requests = 0
 export class Hub {
   services = new ObjectMap<string, Services>()
   channel = new Channel<State>()
+  connections = new Set<State>()
   constructor(port: number = defaultHubPort) {
     const statusState = new LazyState<StatusState>(() => ({
       requests,
@@ -79,15 +80,20 @@ export class Hub {
         if (auth.sender === sender) {
           delete auth.sender
         }
+        this.connections.delete(state)
         state.services.forEach(s => this.services.get(s)?.remove(sender))
         statusState.setNeedsUpdate()
       })
-      .listen(port, async headers => ({
-        key: headers.get('auth') ?? undefined,
-        permissions: await auth.permissions(headers.get('auth')),
-        services: [],
-        requests: 0,
-      }))
+      .listen(port, async headers => {
+        const state: State = {
+          key: headers.get('auth') ?? undefined,
+          permissions: await auth.permissions(headers.get('auth')),
+          services: [],
+          requests: 0,
+        }
+        this.connections.add(state)
+        return state
+      })
   }
   stats() {
     this.services.map(a => a)
