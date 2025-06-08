@@ -122,17 +122,17 @@ export class Hub {
           delete auth.sender
         }
       })
-      .listen(port, async headers => {
-        const { id, permissions } = await auth.permissions(headers.get('auth'))
-        const state: State = {
-          key: headers.get('auth') ?? undefined,
-          id,
-          permissions,
-          services: [],
-          requests: 0,
-        }
-        this.connections.add(state)
-        return state
+      .listen(port, {
+        async state(headers: Headers): Promise<State> {
+          const { id, permissions } = await auth.permissions(headers.get('auth'))
+          return {
+            key: headers.get('auth') ?? undefined,
+            id,
+            permissions,
+            services: [],
+            requests: 0,
+          }
+        },
       })
   }
   stats() {
