@@ -213,6 +213,7 @@ class Services {
       if (s.state.permissions.has(permission)) {
         enabled.add(s)
         s.enabled = true
+        this.services.push(s)
       }
     })
     if (!enabled.size) return 0
@@ -225,6 +226,7 @@ class Services {
       if (s.state.permissions.has(permission)) {
         disabled.add(s)
         s.enabled = false
+        this.disabled.push(s)
       }
     })
     if (!disabled.size) return 0
