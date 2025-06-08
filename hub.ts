@@ -176,13 +176,9 @@ export class Hub {
     return true
   }
   async reauthorizeServices() {
-    const unauthorizedSenders = new Set<Sender>()
-    this.services.forEach(a => {
-      a.services.forEach(s => !s.state.permissions.has('auth') && unauthorizedSenders.add(s.sender))
-      a.disabled.forEach(s => !s.state.permissions.has('auth') && unauthorizedSenders.add(s.sender))
-    })
-    unauthorizedSenders.forEach(sender => {
-      sender.stop()
+    this.connections.forEach(a => {
+      if (a.state.permissions.has('auth')) return
+      a.sender.stop()
     })
   }
   get statusBadges(): StatusBadges {
