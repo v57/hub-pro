@@ -4,7 +4,7 @@ import { Authorization } from './auth.ts'
 import { ApiPermissions } from './permissions.ts'
 const auth = new Authorization()
 await auth.load()
-const apiPermissions = new ApiPermissions()
+const apiPermissions = await new ApiPermissions().load()
 
 const defaultHubPort = Number(Bun.env.HUBPORT ?? 1997)
 
@@ -151,7 +151,7 @@ export class Hub {
         service = new Services(s)
         this.services.set(s, service)
       }
-      const enabled = isAuth ?? apiPermissions.allowsService(service.name, state.permissions)
+      const enabled = isAuth || apiPermissions.allowsService(service.name, state.permissions)
       service.add({ sender, state, enabled })
       console.log('Service', s, service.services.length)
     })
