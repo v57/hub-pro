@@ -32,6 +32,7 @@ export class Hub {
       services: this.services.map(a => a.status),
       pro: true,
     }))
+    const statusBadges = new LazyState<StatusBadges>(() => this.statusBadges)
     const pendingAuthorizations = new LazyState<PendingAuthorization[]>(() => {
       let result: { [key: string]: string[] | undefined } = {}
       this.services.forEach(s =>
@@ -55,6 +56,7 @@ export class Hub {
         this.addServices(sender, state, body)
         statusState.setNeedsUpdate()
         pendingAuthorizations.setNeedsUpdate()
+        statusBadges.setNeedsUpdate()
       })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
@@ -68,6 +70,7 @@ export class Hub {
         if (changes) {
           statusState.setNeedsUpdate()
           pendingAuthorizations.setNeedsUpdate()
+          statusBadges.setNeedsUpdate()
         }
       })
       .post('hub/permissions/remove', ({ body: { services, permission }, state: { permissions } }) => {
@@ -81,11 +84,13 @@ export class Hub {
         if (changes) {
           statusState.setNeedsUpdate()
           pendingAuthorizations.setNeedsUpdate()
+          statusBadges.setNeedsUpdate()
         }
       })
       .stream('hub/permissions/pending', () => pendingAuthorizations.makeIterator())
       .post('hub/status', () => statusState.getValue())
       .stream('hub/status', () => statusState.makeIterator())
+      .stream('hub/status/badges', () => statusBadges.makeIterator())
       .postOther(other, async ({ body }, path) => {
         const service = this.services.get(path)
         if (!service) throw 'api not found'
@@ -175,6 +180,14 @@ export class Hub {
       sender.stop()
     })
   }
+  get statusBadges(): StatusBadges {
+    let security = 0
+    this.services.forEach(s => (security += s.disabled.length))
+    return {
+      services: this.services.size,
+      security,
+    }
+  }
 }
 
 function other(): boolean {
@@ -259,4 +272,8 @@ interface ServicesStatus {
   requests: number
   services: number
   disabled: number
+}
+interface StatusBadges {
+  services: number
+  security: number
 }
