@@ -1,4 +1,4 @@
-import { Channel, type Sender, ObjectMap } from 'channel/server'
+import { Channel, type Sender, type BodyContext, ObjectMap } from 'channel/server'
 import { LazyState } from 'channel/more'
 import { Authorization } from './auth.ts'
 import { ApiPermissions } from './permissions.ts'
@@ -25,7 +25,7 @@ let requests = 0
 export class Hub {
   services = new ObjectMap<string, Services>()
   channel = new Channel<State>()
-  connections = new Set<State>()
+  connections = new Set<BodyContext<State>>()
   constructor(port: number = defaultHubPort) {
     const statusState = new LazyState<StatusState>(() => ({
       requests,
@@ -48,7 +48,7 @@ export class Hub {
         }),
       )
       return Object.entries(result).map(([id, pending]) => ({ id, pending }) as PendingAuthorization)
-    }).delay(1)
+    })
     this.channel
       .post('hub/service/add', ({ body, state, sender }) => {
         if (!Array.isArray(body)) throw 'invalid command'
@@ -115,7 +115,6 @@ export class Hub {
         if (auth.sender === sender) {
           delete auth.sender
         }
-        this.connections.delete(state)
         state.services.forEach(s => this.services.get(s)?.remove(sender))
         statusState.setNeedsUpdate()
         if (sender === auth.sender) {
@@ -132,6 +131,12 @@ export class Hub {
             services: [],
             requests: 0,
           }
+        },
+        onConnect: (connection: BodyContext<State>) => {
+          this.connections.add(connection)
+        },
+        onDisconnect: (connection: BodyContext<State>) => {
+          this.connections.delete(connection)
         },
       })
   }
