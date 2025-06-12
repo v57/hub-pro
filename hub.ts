@@ -88,7 +88,6 @@ export class Hub {
         }
       })
       .stream('hub/permissions/pending', () => pendingAuthorizations.makeIterator())
-      .post('hub/status', () => statusState.getValue())
       .stream('hub/status', () => statusState.makeIterator())
       .stream('hub/status/badges', () => statusBadges.makeIterator())
       .postOther(other, async ({ body }, path) => {
