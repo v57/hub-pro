@@ -154,6 +154,7 @@ export class Hub {
       service.add({ sender, state, enabled })
       console.log('Service', s, service.services.length)
     })
+    console.log('Added', services.length, 'services')
     if (state.permissions.has('auth')) this.reauthorizeServices()
   }
   private checkAuthorization(sender: Sender, state: State, service: string) {
