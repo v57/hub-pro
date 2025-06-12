@@ -1,4 +1,4 @@
-import { Hub } from './hub'
+import { Hub } from './src/hub'
 let port: number | undefined
 const argv = process.argv.slice(2)
 while (true) {
