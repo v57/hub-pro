@@ -77,6 +77,10 @@ export class Hub {
         if (!permissions.has('owner')) throw 'unauthorized'
         this.merger.connect(address, this)
       })
+      .post('hub/merge/remove', ({ body: address, state: { permissions } }) => {
+        if (!permissions.has('owner')) throw 'unauthorized'
+        this.merger.disconnect(address)
+      })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
