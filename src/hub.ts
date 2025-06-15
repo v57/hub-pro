@@ -52,8 +52,14 @@ export class Hub {
     this.channel
       .post('hub/service/add', ({ body, state, sender }) => {
         if (!Array.isArray(body)) throw 'invalid command'
-        state.services = state.services.concat(body)
         this.addServices(sender, state, body)
+        statusState.setNeedsUpdate()
+        pendingAuthorizations.setNeedsUpdate()
+        statusBadges.setNeedsUpdate()
+      })
+      .post('hub/service/remove', ({ body, state, sender }) => {
+        if (!Array.isArray(body)) throw 'invalid command'
+        this.removeServices(sender, state, body)
         statusState.setNeedsUpdate()
         pendingAuthorizations.setNeedsUpdate()
         statusBadges.setNeedsUpdate()
@@ -143,6 +149,7 @@ export class Hub {
     this.services.map(a => a)
   }
   addServices(sender: Sender, state: State, services: string[]) {
+    state.services = state.services.concat(services) // very bad
     services.forEach(s => {
       const isAuth = this.checkAuthorization(sender, state, s)
       let service = this.services.get(s)
@@ -156,6 +163,14 @@ export class Hub {
     })
     console.log('Added', services.length, 'services')
     if (state.permissions.has('auth')) this.reauthorizeServices()
+  }
+  removeServices(sender: Sender, state: State, services: string[]) {
+    state.services = state.services.filter(a => services.includes(a)) // very unoptimized
+    services.forEach(s => {
+      let service = this.services.get(s)
+      if (!service) return
+      service.remove(sender)
+    })
   }
   private checkAuthorization(sender: Sender, state: State, service: string) {
     if (service === 'owner' || service.startsWith?.('owner/')) throw 'invalid service'
