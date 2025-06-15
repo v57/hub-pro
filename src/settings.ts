@@ -3,16 +3,23 @@ interface Settings {
 }
 
 class HubSettings {
-  settings: Settings = {
+  data: Settings = {
     merge: [],
   }
+  private isSavePending = false
   async load() {
     try {
-      this.settings = await Bun.file('hub.json').json()
+      this.data = await Bun.file('hub.json').json()
     } catch {}
   }
-  async save() {
-    await Bun.file('hub.json').write(JSON.stringify(this.settings, null, 2))
+  private async save() {
+    this.isSavePending = false
+    await Bun.file('hub.json').write(JSON.stringify(this.data, null, 2))
+  }
+  async setNeedsSave() {
+    if (this.isSavePending) return
+    this.isSavePending = true
+    setTimeout(() => this.save(), 1000)
   }
 }
 
