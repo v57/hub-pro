@@ -75,7 +75,7 @@ export class Hub {
       })
       .post('hub/merge/add', ({ body: address, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
-        this.merger.addConnection(address, this)
+        this.merger.connect(address, this)
       })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {

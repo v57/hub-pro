@@ -5,10 +5,16 @@ const v = '0'
 
 export class HubMerger {
   connections = new Map<string, Connection>()
-  addConnection(address: string, hub: Hub) {
+  connect(address: string, hub: Hub) {
     if (this.connections.has(address)) return
     const connection = new Connection(address, () => Object.keys(hub.services.storage))
     this.connections.set(address, connection)
+  }
+  disconnect(address: string) {
+    const connection = this.connections.get(address)
+    if (!connection) return
+    this.connections.delete(address)
+    connection.disconnect()
   }
 }
 
@@ -26,5 +32,8 @@ class Connection {
   }
   update(added: string[], removed: string[]) {
     this.channel.send('hub/proxy/create', { added, removed })
+  }
+  disconnect() {
+    this.channel.stop()
   }
 }
