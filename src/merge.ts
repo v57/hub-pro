@@ -8,7 +8,7 @@ export class HubMerger {
   connections = new Map<string, Connection>()
   connect(address: string, hub: Hub) {
     if (this.connections.has(address)) return
-    const connection = new Connection(address, () => Object.keys(hub.services.storage))
+    const connection = new Connection(address, () => Object.keys(hub.services.storage).filter(allows))
     this.connections.set(address, connection)
     settings.addMerge(address)
   }
@@ -18,9 +18,6 @@ export class HubMerger {
     this.connections.delete(address)
     connection.disconnect()
     settings.removeMerge(address)
-  }
-  updated(added: string[], removed: string[]) {
-    this.connections.forEach(a => a.update(added, removed))
   }
   context(): ServiceUpdateContext {
     return new ServiceUpdateContext(this)
@@ -38,6 +35,7 @@ export class ServiceUpdateContext {
   }
   add(service: string) {
     if (!this.isActive) return
+    if (!allows(service)) return
     this.added.push(service)
   }
   remove(service: string) {
@@ -46,7 +44,7 @@ export class ServiceUpdateContext {
   }
   applyChanges() {
     if (!this.added.length && !this.removed.length) return
-    this.merger.updated(this.added, this.removed)
+    this.merger.connections.forEach(a => a.update(this.added, this.removed))
   }
 }
 
@@ -68,4 +66,12 @@ class Connection {
   disconnect() {
     this.channel.stop()
   }
+}
+
+function allows(service: string): boolean {
+  return (
+    !(service.startsWith('auth/') || service === 'auth' || service.startsWith('launcher/') || service === 'auth') ||
+    service.startsWith('hub/') ||
+    service === 'hub'
+  )
 }
