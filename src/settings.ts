@@ -21,6 +21,17 @@ class HubSettings {
     this.isSavePending = true
     setTimeout(() => this.save(), 1000)
   }
+  addMerge(address: string) {
+    if (this.data.merge.includes(address)) return
+    this.data.merge.push(address)
+    this.setNeedsSave()
+  }
+  removeMerge(address: string) {
+    const i = this.data.merge.findIndex(a => a === address)
+    if (i == -1) return
+    this.data.merge.splice(i, 1)
+    this.setNeedsSave()
+  }
 }
 
 export let settings = await new HubSettings().load()
