@@ -1,6 +1,7 @@
 import type { Hub } from './hub'
 import { sign } from './keychain'
 import { Channel } from 'channel/client'
+import { settings } from './settings'
 const v = '0'
 
 export class HubMerger {
@@ -9,12 +10,14 @@ export class HubMerger {
     if (this.connections.has(address)) return
     const connection = new Connection(address, () => Object.keys(hub.services.storage))
     this.connections.set(address, connection)
+    settings.addMerge(address)
   }
   disconnect(address: string) {
     const connection = this.connections.get(address)
     if (!connection) return
     this.connections.delete(address)
     connection.disconnect()
+    settings.removeMerge(address)
   }
 }
 

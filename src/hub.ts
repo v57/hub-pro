@@ -3,6 +3,7 @@ import { LazyState } from 'channel/more'
 import { Authorization } from './auth.ts'
 import { ApiPermissions } from './permissions.ts'
 import { HubMerger } from './merge.ts'
+import { settings } from './settings.ts'
 const auth = new Authorization()
 await auth.load()
 const apiPermissions = await new ApiPermissions().load()
@@ -161,6 +162,8 @@ export class Hub {
           this.connections.delete(connection)
         },
       })
+
+    settings.data.merge.forEach(address => this.merger.connect(address, this))
   }
   stats() {
     this.services.map(a => a)

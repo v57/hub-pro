@@ -11,6 +11,7 @@ class HubSettings {
     try {
       this.data = await Bun.file('hub.json').json()
     } catch {}
+    return this
   }
   private async save() {
     this.isSavePending = false
