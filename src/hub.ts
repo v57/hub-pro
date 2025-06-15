@@ -52,27 +52,26 @@ export class Hub {
       )
       return Object.entries(result).map(([id, pending]) => ({ id, pending }) as PendingAuthorization)
     })
+    const sendUpdates = () => {
+      statusState.setNeedsUpdate()
+      pendingAuthorizations.setNeedsUpdate()
+      statusBadges.setNeedsUpdate()
+    }
     this.channel
       .post('hub/service/add', ({ body, state, sender }) => {
         if (!Array.isArray(body)) throw 'invalid command'
         this.addServices(sender, state, body)
-        statusState.setNeedsUpdate()
-        pendingAuthorizations.setNeedsUpdate()
-        statusBadges.setNeedsUpdate()
+        sendUpdates()
       })
       .post('hub/service/remove', ({ body, state, sender }) => {
         if (!Array.isArray(body)) throw 'invalid command'
         this.removeServices(sender, state, body)
-        statusState.setNeedsUpdate()
-        pendingAuthorizations.setNeedsUpdate()
-        statusBadges.setNeedsUpdate()
+        sendUpdates()
       })
       .post('hub/service/update', ({ body: { add, remove }, state, sender }) => {
         if (add && !Array.isArray(add)) this.addServices(sender, state, add)
         if (remove && !Array.isArray(remove)) this.removeServices(sender, state, remove)
-        statusState.setNeedsUpdate()
-        pendingAuthorizations.setNeedsUpdate()
-        statusBadges.setNeedsUpdate()
+        sendUpdates()
       })
       .post('hub/merge/add', ({ body: address, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
@@ -91,11 +90,7 @@ export class Hub {
           const s = this.services.get(service)
           if (s) changes += s.addPermission(permission)
         }
-        if (changes) {
-          statusState.setNeedsUpdate()
-          pendingAuthorizations.setNeedsUpdate()
-          statusBadges.setNeedsUpdate()
-        }
+        if (changes) sendUpdates()
       })
       .post('hub/permissions/remove', ({ body: { services, permission }, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
@@ -105,11 +100,7 @@ export class Hub {
           const s = this.services.get(service)
           if (s) changes += s.removePermission(permission)
         }
-        if (changes) {
-          statusState.setNeedsUpdate()
-          pendingAuthorizations.setNeedsUpdate()
-          statusBadges.setNeedsUpdate()
-        }
+        if (changes) sendUpdates()
       })
       .stream('hub/permissions/pending', () => pendingAuthorizations.makeIterator())
       .stream('hub/status', () => statusState.makeIterator())
@@ -226,9 +217,7 @@ export class Hub {
   }
 }
 
-function other(): boolean {
-  return true
-}
+const other = () => true
 
 interface Service {
   state: State
