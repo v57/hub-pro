@@ -2,6 +2,7 @@ import { Channel, type Sender, type BodyContext, ObjectMap } from 'channel/serve
 import { LazyState } from 'channel/more'
 import { Authorization } from './auth.ts'
 import { ApiPermissions } from './permissions.ts'
+import { HubMerger } from './merge.ts'
 const auth = new Authorization()
 await auth.load()
 const apiPermissions = await new ApiPermissions().load()
@@ -26,6 +27,7 @@ export class Hub {
   services = new ObjectMap<string, Services>()
   channel = new Channel<State>()
   connections = new Set<BodyContext<State>>()
+  merger = new HubMerger()
   constructor(port: number = defaultHubPort) {
     const statusState = new LazyState<StatusState>(() => ({
       requests,
@@ -70,6 +72,10 @@ export class Hub {
         statusState.setNeedsUpdate()
         pendingAuthorizations.setNeedsUpdate()
         statusBadges.setNeedsUpdate()
+      })
+      .post('hub/merge/add', ({ body: address, state: { permissions } }) => {
+        if (!permissions.has('owner')) throw 'unauthorized'
+        this.merger.addConnection(address, this)
       })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {

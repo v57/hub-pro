@@ -3,7 +3,7 @@ import { sign } from './keychain'
 import { Channel } from 'channel/client'
 const v = '0'
 
-class HubMerger {
+export class HubMerger {
   connections = new Map<string, Connection>()
   addConnection(address: string, hub: Hub) {
     if (this.connections.has(address)) return
