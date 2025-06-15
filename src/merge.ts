@@ -19,6 +19,35 @@ export class HubMerger {
     connection.disconnect()
     settings.removeMerge(address)
   }
+  updated(added: string[], removed: string[]) {
+    this.connections.forEach(a => a.update(added, removed))
+  }
+  context(): ServiceUpdateContext {
+    return new ServiceUpdateContext(this)
+  }
+}
+
+export class ServiceUpdateContext {
+  added: string[] = []
+  removed: string[] = []
+  merger: HubMerger
+  isActive: boolean
+  constructor(merger: HubMerger) {
+    this.merger = merger
+    this.isActive = merger.connections.size > 0
+  }
+  add(service: string) {
+    if (!this.isActive) return
+    this.added.push(service)
+  }
+  remove(service: string) {
+    if (!this.isActive) return
+    this.removed.push(service)
+  }
+  applyChanges() {
+    if (!this.added.length && !this.removed.length) return
+    this.merger.updated(this.added, this.removed)
+  }
 }
 
 class Connection {

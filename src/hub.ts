@@ -2,7 +2,7 @@ import { Channel, type Sender, type BodyContext, ObjectMap } from 'channel/serve
 import { LazyState } from 'channel/more'
 import { Authorization } from './auth.ts'
 import { ApiPermissions } from './permissions.ts'
-import { HubMerger } from './merge.ts'
+import { HubMerger, ServiceUpdateContext } from './merge.ts'
 import { settings } from './settings.ts'
 const auth = new Authorization()
 await auth.load()
@@ -60,17 +60,23 @@ export class Hub {
     this.channel
       .post('hub/service/add', ({ body, state, sender }) => {
         if (!Array.isArray(body)) throw 'invalid command'
-        this.addServices(sender, state, body)
+        const context = this.merger.context()
+        this.addServices(sender, state, body, context)
+        context.applyChanges()
         sendUpdates()
       })
       .post('hub/service/remove', ({ body, state, sender }) => {
         if (!Array.isArray(body)) throw 'invalid command'
-        this.removeServices(sender, state, body)
+        const context = this.merger.context()
+        this.removeServices(sender, state, body, context)
+        context.applyChanges()
         sendUpdates()
       })
       .post('hub/service/update', ({ body: { add, remove }, state, sender }) => {
-        if (add && !Array.isArray(add)) this.addServices(sender, state, add)
-        if (remove && !Array.isArray(remove)) this.removeServices(sender, state, remove)
+        const context = this.merger.context()
+        if (add && !Array.isArray(add)) this.addServices(sender, state, add, context)
+        if (remove && !Array.isArray(remove)) this.removeServices(sender, state, remove, context)
+        context.applyChanges()
         sendUpdates()
       })
       .post('hub/merge/add', ({ body: address, state: { permissions } }) => {
@@ -85,21 +91,25 @@ export class Hub {
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
         apiPermissions.addServices(services, permission)
+        const context = this.merger.context()
         let changes = 0
         for (const service of services) {
           const s = this.services.get(service)
-          if (s) changes += s.addPermission(permission)
+          if (s) changes += s.addPermission(permission, context)
         }
+        context.applyChanges()
         if (changes) sendUpdates()
       })
       .post('hub/permissions/remove', ({ body: { services, permission }, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
         apiPermissions.removeServices(services, permission)
         let changes = 0
+        const context = this.merger.context()
         for (const service of services) {
           const s = this.services.get(service)
-          if (s) changes += s.removePermission(permission)
+          if (s) changes += s.removePermission(permission, context)
         }
+        context.applyChanges()
         if (changes) sendUpdates()
       })
       .stream('hub/permissions/pending', () => pendingAuthorizations.makeIterator())
@@ -129,7 +139,9 @@ export class Hub {
         if (auth.sender === sender) {
           delete auth.sender
         }
-        state.services.forEach(s => this.services.get(s)?.remove(sender))
+        const context = this.merger.context()
+        state.services.forEach(s => this.services.get(s)?.remove(sender, context))
+        context.applyChanges()
         statusState.setNeedsUpdate()
         if (sender === auth.sender) {
           delete auth.sender
@@ -159,7 +171,7 @@ export class Hub {
   stats() {
     this.services.map(a => a)
   }
-  addServices(sender: Sender, state: State, services: string[]) {
+  addServices(sender: Sender, state: State, services: string[], context: ServiceUpdateContext) {
     state.services = state.services.concat(services) // very bad
     services.forEach(s => {
       const isAuth = this.checkAuthorization(sender, state, s)
@@ -169,18 +181,18 @@ export class Hub {
         this.services.set(s, service)
       }
       const enabled = isAuth || apiPermissions.allowsService(service.name, state.permissions)
-      service.add({ sender, state, enabled })
+      service.add({ sender, state, enabled }, context)
       console.log('Service', s, service.services.length)
     })
     console.log('Added', services.length, 'services')
     if (state.permissions.has('auth')) this.reauthorizeServices()
   }
-  removeServices(sender: Sender, state: State, services: string[]) {
+  removeServices(sender: Sender, state: State, services: string[], context: ServiceUpdateContext) {
     state.services = state.services.filter(a => services.includes(a)) // very unoptimized
     services.forEach(s => {
       let service = this.services.get(s)
       if (!service) return
-      service.remove(sender)
+      service.remove(sender, context)
     })
   }
   private checkAuthorization(sender: Sender, state: State, service: string) {
@@ -234,10 +246,11 @@ class Services {
   constructor(name: string) {
     this.name = name
   }
-  add(service: Service) {
+  add(service: Service, context: ServiceUpdateContext) {
     if (service.enabled) {
       if (this.services.findIndex(a => a.sender === service.sender) === -1) {
         this.services.push(service)
+        if (this.services.length === 1) context.add(this.name)
       }
     } else {
       if (this.disabled.findIndex(a => a.sender === service.sender) === -1) {
@@ -245,20 +258,21 @@ class Services {
       }
     }
   }
-  addPermission(permission: string): number {
+  addPermission(permission: string, context: ServiceUpdateContext): number {
     let enabled = new Set<Service>()
     this.disabled.forEach(s => {
       if (s.state.permissions.has(permission)) {
         enabled.add(s)
         s.enabled = true
         this.services.push(s)
+        if (this.services.length === 1) context.add(this.name)
       }
     })
     if (!enabled.size) return 0
     this.disabled = this.disabled.filter(a => !enabled.has(a))
     return enabled.size
   }
-  removePermission(permission: string): number {
+  removePermission(permission: string, context: ServiceUpdateContext): number {
     let disabled = new Set<Service>()
     this.services.forEach(s => {
       if (s.state.permissions.has(permission)) {
@@ -269,11 +283,17 @@ class Services {
     })
     if (!disabled.size) return 0
     this.services = this.services.filter(a => !disabled.has(a))
+    if (this.services.length === 0) context.remove(this.name)
     return disabled.size
   }
-  remove(sender: Sender) {
+  remove(sender: Sender, context: ServiceUpdateContext) {
     let index = this.services.findIndex(a => a.sender === sender)
-    if (index >= 0) this.services.splice(index, 1)
+    if (index >= 0) {
+      this.services.splice(index, 1)
+      if (this.services.length === 0) {
+        context.remove(this.name)
+      }
+    }
     index = this.disabled.findIndex(a => a.sender === sender)
     if (index >= 0) this.disabled.splice(index, 1)
   }
