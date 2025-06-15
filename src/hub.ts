@@ -64,6 +64,13 @@ export class Hub {
         pendingAuthorizations.setNeedsUpdate()
         statusBadges.setNeedsUpdate()
       })
+      .post('hub/service/update', ({ body: { add, remove }, state, sender }) => {
+        if (add && !Array.isArray(add)) this.addServices(sender, state, add)
+        if (remove && !Array.isArray(remove)) this.removeServices(sender, state, remove)
+        statusState.setNeedsUpdate()
+        pendingAuthorizations.setNeedsUpdate()
+        statusBadges.setNeedsUpdate()
+      })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
