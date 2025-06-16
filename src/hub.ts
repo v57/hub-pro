@@ -58,13 +58,6 @@ export class Hub {
       statusBadges.setNeedsUpdate()
     }
     this.channel
-      .post('hub/service/add', ({ body, state, sender }) => {
-        if (!Array.isArray(body)) throw 'invalid command'
-        const context = this.merger.context()
-        this.addServices(sender, state, body, context)
-        context.applyChanges()
-        sendUpdates()
-      })
       .post('hub/service/update', ({ body: { add, remove }, state, sender }) => {
         const context = this.merger.context()
         if (add && Array.isArray(add)) this.addServices(sender, state, add, context)
