@@ -74,8 +74,8 @@ export class Hub {
       })
       .post('hub/service/update', ({ body: { add, remove }, state, sender }) => {
         const context = this.merger.context()
-        if (add && !Array.isArray(add)) this.addServices(sender, state, add, context)
-        if (remove && !Array.isArray(remove)) this.removeServices(sender, state, remove, context)
+        if (add && Array.isArray(add)) this.addServices(sender, state, add, context)
+        if (remove && Array.isArray(remove)) this.removeServices(sender, state, remove, context)
         context.applyChanges()
         sendUpdates()
       })
