@@ -6,11 +6,11 @@ const v = '0'
 
 export class HubMerger {
   connections = new Map<string, Connection>()
-  connect(address: string, hub: Hub) {
+  connect(address: string, hub: Hub, save: boolean = true) {
     if (this.connections.has(address)) return
     const connection = new Connection(address, () => Object.keys(hub.services.storage).filter(allows))
     this.connections.set(address, connection)
-    settings.addMerge(address)
+    if (save) settings.addMerge(address)
   }
   disconnect(address: string) {
     const connection = this.connections.get(address)
@@ -53,6 +53,7 @@ class Connection {
   channel
   constructor(address: string, services: () => string[]) {
     this.address = address
+    console.log('Merging to', address)
     this.channel = new Channel().connect(this.address, {
       headers: async () => ({ auth: await sign(), v }),
       async onConnect(sender) {
