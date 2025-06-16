@@ -60,8 +60,8 @@ class Connection {
       },
     })
   }
-  update(added: string[], removed: string[]) {
-    this.channel.send('hub/proxy/create', { added, removed })
+  update(add: string[], remove: string[]) {
+    this.channel.send('hub/service/update', { add, remove })
   }
   disconnect() {
     this.channel.stop()

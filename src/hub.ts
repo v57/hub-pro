@@ -179,6 +179,7 @@ export class Hub {
       if (!service) {
         service = new Services(s)
         this.services.set(s, service)
+        context.add(s)
       }
       const enabled = isAuth || apiPermissions.allowsService(service.name, state.permissions)
       service.add({ sender, state, enabled }, context)
