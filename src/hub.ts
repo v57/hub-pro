@@ -65,13 +65,6 @@ export class Hub {
         context.applyChanges()
         sendUpdates()
       })
-      .post('hub/service/remove', ({ body, state, sender }) => {
-        if (!Array.isArray(body)) throw 'invalid command'
-        const context = this.merger.context()
-        this.removeServices(sender, state, body, context)
-        context.applyChanges()
-        sendUpdates()
-      })
       .post('hub/service/update', ({ body: { add, remove }, state, sender }) => {
         const context = this.merger.context()
         if (add && Array.isArray(add)) this.addServices(sender, state, add, context)
