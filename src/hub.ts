@@ -74,6 +74,7 @@ export class Hub {
         if (!permissions.has('owner')) throw 'unauthorized'
         this.merger.disconnect(address)
       })
+      .stream('hub/merge/status', () => this.merger.state.makeIterator())
       .post('hub/key', ({ state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
         return publicKey()

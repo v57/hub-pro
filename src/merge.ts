@@ -2,10 +2,20 @@ import type { Hub } from './hub'
 import { sign } from './keychain'
 import { Channel } from 'channel/client'
 import { settings } from './settings'
+import { LazyState } from 'channel/more'
 const v = '0'
 
 export class HubMerger {
   connections = new Map<string, Connection>()
+  state: LazyState<ConnectionStatus[]>
+  constructor() {
+    this.state = new LazyState<ConnectionStatus[]>(async () =>
+      this.connections
+        .values()
+        .map(a => a.status)
+        .toArray(),
+    )
+  }
   connect(address: string, hub: Hub, save: boolean = true) {
     if (this.connections.has(address)) return
     const connection = new Connection(address, () => Object.keys(hub.services.storage).filter(allows))
@@ -22,6 +32,12 @@ export class HubMerger {
   context(): ServiceUpdateContext {
     return new ServiceUpdateContext(this)
   }
+}
+
+interface ConnectionStatus {
+  address: string
+  error?: string
+  isConnected: boolean
 }
 
 export class ServiceUpdateContext {
@@ -49,23 +65,43 @@ export class ServiceUpdateContext {
 }
 
 class Connection {
-  address: string | number
-  channel
+  address: string
+  channel?
+  error?: string
   constructor(address: string, services: () => string[]) {
     this.address = address
     console.log('Merging to', address)
+    const t = this
     this.channel = new Channel().connect(this.address, {
       headers: async () => ({ auth: await sign(), v }),
       async onConnect(sender) {
-        await sender.send('hub/service/update', { add: services() })
+        const add = services()
+        if (!add.length) return
+        try {
+          await sender.send('hub/service/update', { add })
+        } catch (error) {
+          t.error = `${error}`
+        }
       },
     })
   }
-  update(add: string[], remove: string[]) {
-    this.channel.send('hub/service/update', { add, remove })
+  async update(add: string[], remove: string[]) {
+    try {
+      await this.channel?.send('hub/service/update', { add, remove })
+    } catch (error) {
+      this.error = `${error}`
+    }
   }
   disconnect() {
-    this.channel.stop()
+    this.channel?.stop()
+    delete this.channel
+  }
+  get status(): ConnectionStatus {
+    return {
+      address: this.address,
+      error: this.error,
+      isConnected: this.channel?.ws.isConnected ?? false,
+    }
   }
 }
 
