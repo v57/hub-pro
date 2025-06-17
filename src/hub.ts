@@ -4,6 +4,7 @@ import { Authorization } from './auth.ts'
 import { ApiPermissions } from './permissions.ts'
 import { HubMerger, ServiceUpdateContext } from './merge.ts'
 import { settings } from './settings.ts'
+import { publicKey } from './keychain.ts'
 const auth = new Authorization()
 await auth.load()
 const apiPermissions = await new ApiPermissions().load()
@@ -72,6 +73,10 @@ export class Hub {
       .post('hub/merge/remove', ({ body: address, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
         this.merger.disconnect(address)
+      })
+      .post('hub/key', ({ state: { permissions } }) => {
+        if (!permissions.has('owner')) throw 'unauthorized'
+        return publicKey()
       })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {

@@ -6,6 +6,10 @@ export async function sign(expires: number = 10) {
   const signature = makeSignature(key, data)
   return `key.${getPublicKey(key)}.${signature}.${data}`
 }
+export async function publicKey(): Promise<string> {
+  const key = await loadKey()
+  return getPublicKey(key)
+}
 async function loadKey(): Promise<string> {
   try {
     return await Bun.file('auth').text()
