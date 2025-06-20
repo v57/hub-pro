@@ -9,7 +9,7 @@ const auth = new Authorization()
 await auth.load()
 const apiPermissions = await new ApiPermissions().load()
 
-const defaultHubPort = Number(Bun.env.HUBPORT ?? 1997)
+const paddr = (a?: string) => (a ? (isNaN(Number(a)) ? a : Number(a)) : 1997)
 
 interface State {
   key?: string
@@ -30,7 +30,7 @@ export class Hub {
   channel = new Channel<State>()
   connections = new Set<BodyContext<State>>()
   merger = new HubMerger()
-  constructor(port: number = defaultHubPort) {
+  constructor(address = paddr(Bun.env.HUBLISTEN)) {
     const statusState = new LazyState<StatusState>(() => ({
       requests,
       services: this.services.map(a => a.status),
@@ -139,7 +139,7 @@ export class Hub {
           delete auth.sender
         }
       })
-      .listen(port, {
+      .listen(address, {
         async state(headers: Headers): Promise<State> {
           const { id, permissions } = await auth.permissions(headers.get('auth'))
           return {
