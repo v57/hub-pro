@@ -21,6 +21,7 @@ export class HubMerger {
     const connection = new Connection(address, () => Object.keys(hub.services.storage).filter(allows))
     this.connections.set(address, connection)
     if (save) settings.addMerge(address)
+    this.state.setNeedsUpdate()
   }
   disconnect(address: string) {
     const connection = this.connections.get(address)
@@ -28,6 +29,7 @@ export class HubMerger {
     this.connections.delete(address)
     connection.disconnect()
     settings.removeMerge(address)
+    this.state.setNeedsUpdate()
   }
   context(): ServiceUpdateContext {
     return new ServiceUpdateContext(this)
