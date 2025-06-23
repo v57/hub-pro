@@ -80,6 +80,16 @@ export class Hub {
         if (!permissions.has('owner')) throw 'unauthorized'
         return publicKey()
       })
+      .post('hub/proxy', ({ body: { body, path, name } }) => {
+        const proxy = this.proxies.get(name)
+        if (!proxy) throw 'proxy not found'
+        return proxy.send(path, body)
+      })
+      .stream('hub/proxy', ({ body: { body, path, name } }) => {
+        const proxy = this.proxies.get(name)
+        if (!proxy) throw 'proxy not found'
+        return proxy.values(path, body)
+      })
       .post('hub/proxy/join', ({ sender, state }) => {
         if (!state.id) throw 'unauthorized'
         this.proxies.set(state.id, sender)
