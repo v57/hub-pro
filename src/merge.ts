@@ -7,6 +7,7 @@ const v = '0'
 
 export class HubMerger {
   connections = new Map<string, Connection>()
+  proxies = new Map<string, Connection>()
   state: LazyState<ConnectionStatus[]>
   constructor() {
     this.state = new LazyState<ConnectionStatus[]>(async () =>
@@ -18,7 +19,7 @@ export class HubMerger {
   }
   connect(address: string, hub: Hub, save: boolean = true) {
     if (this.connections.has(address)) return
-    const connection = new Connection(address, () => Object.keys(hub.services.storage).filter(allows))
+    const connection = new Connection(address, hub, true)
     this.connections.set(address, connection)
     if (save) settings.addMerge(address)
   }
@@ -28,6 +29,19 @@ export class HubMerger {
     this.connections.delete(address)
     connection.disconnect()
     settings.removeMerge(address)
+  }
+  connectProxy(address: string, hub: Hub, save: boolean = true) {
+    if (this.proxies.has(address)) return
+    const connection = new Connection(address, hub, false)
+    this.proxies.set(address, connection)
+    if (save) settings.addProxy(address)
+  }
+  disconnectProxy(address: string) {
+    const connection = this.proxies.get(address)
+    if (!connection) return
+    this.proxies.delete(address)
+    connection.disconnect()
+    settings.removeProxy(address)
   }
   context(): ServiceUpdateContext {
     return new ServiceUpdateContext(this)
@@ -68,19 +82,23 @@ class Connection {
   address: string
   channel?
   error?: string
-  constructor(address: string, services: () => string[]) {
+  constructor(address: string, hub: Hub, merge: boolean) {
     this.address = address
     console.log('Merging to', address)
     const t = this
-    this.channel = new Channel().connect(this.address, {
+    this.channel = hub.channel.connect(this.address, {
       headers: async () => ({ auth: await sign(), v }),
       async onConnect(sender) {
-        const add = services()
-        if (!add.length) return
-        try {
-          await sender.send('hub/service/update', { add })
-        } catch (error) {
-          t.error = `${error}`
+        if (merge) {
+          const add = Object.keys(hub.services.storage).filter(allows)
+          if (!add.length) return
+          try {
+            await sender.send('hub/service/update', { add })
+          } catch (error) {
+            t.error = `${error}`
+          }
+        } else {
+          await sender.send('hub/proxy/join')
         }
       },
     })
