@@ -90,6 +90,14 @@ export class Hub {
         if (!proxy) throw 'proxy not found'
         return proxy.values(path, body)
       })
+      .post('hub/proxy/add', ({ body: address, state: { permissions } }) => {
+        if (!permissions.has('owner')) throw 'unauthorized'
+        this.merger.connectProxy(address, this)
+      })
+      .post('hub/proxy/remove', ({ body: address, state: { permissions } }) => {
+        if (!permissions.has('owner')) throw 'unauthorized'
+        this.merger.disconnectProxy(address)
+      })
       .post('hub/proxy/join', ({ sender, state }) => {
         if (!state.id) throw 'unauthorized'
         this.proxies.set(state.id, sender)
