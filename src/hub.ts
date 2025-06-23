@@ -30,6 +30,7 @@ export class Hub {
   channel = new Channel<State>()
   connections = new Set<BodyContext<State>>()
   merger = new HubMerger()
+  proxies = new Map<string, Sender>()
   constructor(address = paddr(Bun.env.HUBLISTEN)) {
     const statusState = new LazyState<StatusState>(() => ({
       requests,
@@ -78,6 +79,11 @@ export class Hub {
       .post('hub/key', ({ state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
         return publicKey()
+      })
+      .post('hub/proxy/join', ({ sender, state }) => {
+        if (!state.id) throw 'unauthorized'
+        this.proxies.set(state.id, sender)
+        return state.id
       })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
@@ -133,6 +139,7 @@ export class Hub {
         }
         const context = this.merger.context()
         state.services.forEach(s => this.services.get(s)?.remove(sender, context))
+        if (state.id) this.proxies.delete(state.id)
         context.applyChanges()
         statusState.setNeedsUpdate()
         if (sender === auth.sender) {
