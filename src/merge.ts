@@ -84,7 +84,11 @@ class Connection {
   error?: string
   constructor(address: string, hub: Hub, merge: boolean) {
     this.address = address
-    console.log('Merging to', address)
+    if (merge) {
+      console.log('Merging to', address)
+    } else {
+      console.log('Proxying to', address)
+    }
     const t = this
     this.channel = hub.channel.connect(this.address, {
       headers: async () => ({ auth: await sign(), v }),
@@ -98,12 +102,15 @@ class Connection {
             t.error = `${error}`
           }
         } else {
+          console.log('joining proxy')
           await sender.send('hub/proxy/join')
+          console.log('joined proxy')
         }
       },
     })
   }
   async update(add: string[], remove: string[]) {
+    console.log('gay')
     try {
       await this.channel?.send('hub/service/update', { add, remove })
     } catch (error) {

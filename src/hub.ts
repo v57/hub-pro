@@ -1,4 +1,5 @@
 import { Channel, type Sender, type BodyContext, ObjectMap } from 'channel/server'
+import 'channel/client'
 import { LazyState } from 'channel/more'
 import { Authorization } from './auth.ts'
 import { ApiPermissions } from './permissions.ts'
@@ -99,6 +100,7 @@ export class Hub {
         this.merger.disconnectProxy(address)
       })
       .post('hub/proxy/join', ({ sender, state }) => {
+        console.log('Joining proxy', state.id)
         if (!state.id) throw 'unauthorized'
         this.proxies.set(state.id, sender)
         return state.id
