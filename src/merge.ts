@@ -22,6 +22,7 @@ export class HubMerger {
     const connection = new Connection(address, hub, true)
     this.connections.set(address, connection)
     if (save) settings.addMerge(address)
+    this.state.setNeedsUpdate()
   }
   disconnect(address: string) {
     const connection = this.connections.get(address)
@@ -29,6 +30,7 @@ export class HubMerger {
     this.connections.delete(address)
     connection.disconnect()
     settings.removeMerge(address)
+    this.state.setNeedsUpdate()
   }
   connectProxy(address: string, hub: Hub, save: boolean = true) {
     if (this.proxies.has(address)) return
