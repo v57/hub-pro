@@ -375,6 +375,7 @@ class Services {
       disabled: this.disabled.length,
       requests: this.requests,
       balancer: this.loadBalancer.name,
+      pending: this.pending.length,
     }
   }
   setBalancer(name: LoadBalancer.Name) {
@@ -411,6 +412,7 @@ interface ServicesStatus {
   services: number
   disabled: number
   balancer: string
+  pending: number
 }
 interface StatusBadges {
   services: number
