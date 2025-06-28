@@ -1,14 +1,14 @@
 import type { Service } from './hub'
 
 export interface LoadBalancer {
-  next(services: Service[]): Service
+  next(services: Service[]): Service | undefined
   add(services: Service[], item: Service): void
   remove(services: Service[], item: Service): void
 }
 
 export class RandomLoadBalancer implements LoadBalancer {
-  next(services: Service[]): Service {
-    if (services.length === 0) throw 'api not available'
+  next(services: Service[]): Service | undefined {
+    if (services.length === 0) return
     return services[Math.floor(Math.random() * services.length)]
   }
   add(services: Service[], service: Service) {
@@ -23,8 +23,8 @@ export class RandomLoadBalancer implements LoadBalancer {
 
 export class CounterLoadBalancer extends RandomLoadBalancer {
   index = 0
-  next(services: Service[]): Service {
-    if (services.length === 0) throw 'api not available'
+  next(services: Service[]): Service | undefined {
+    if (services.length === 0) return
     this.index += 1
     if (this.index >= services.length) this.index = 0
     return services[this.index]
@@ -38,16 +38,14 @@ export class CounterLoadBalancer extends RandomLoadBalancer {
 }
 
 export class FirstAvailableLoadBalancer extends RandomLoadBalancer {
-  next(services: Service[]): Service {
-    const service = services.find(a => !a.sending)
-    if (!service) throw 'api not available'
-    return service
+  next(services: Service[]): Service | undefined {
+    return services.find(a => !a.sending)
   }
 }
 
 export class CounterAvailableLoadBalancer extends CounterLoadBalancer {
-  next(services: Service[]): Service {
-    if (services.length === 0) throw 'api not available'
+  next(services: Service[]): Service | undefined {
+    if (services.length === 0) return
     let index = this.index + 1
     if (index >= services.length) index = 0
     for (let i = index; i < services.length; i += 1) {
@@ -62,7 +60,6 @@ export class CounterAvailableLoadBalancer extends CounterLoadBalancer {
         return services[i]
       }
     }
-    throw 'api not available'
   }
   remove(services: Service[], service: Service) {
     const index = services.findIndex(s => s.sender === service.sender)
