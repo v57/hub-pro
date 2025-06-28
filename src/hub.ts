@@ -324,7 +324,30 @@ class Services {
     return this.loadBalancer.next(this.services)
   }
   get status(): ServicesStatus {
-    return { name: this.name, services: this.services.length, disabled: this.disabled.length, requests: this.requests }
+    return {
+      name: this.name,
+      services: this.services.length,
+      disabled: this.disabled.length,
+      requests: this.requests,
+      balancer: this.loadBalancer.name,
+    }
+  }
+  setBalancer(name: LoadBalancer.Name) {
+    if (this.loadBalancer.name === name) return
+    switch (name) {
+      case 'random':
+        this.loadBalancer = new LoadBalancer.Random()
+        break
+      case 'counter':
+        this.loadBalancer = new LoadBalancer.Counter()
+        break
+      case 'first':
+        this.loadBalancer = new LoadBalancer.FirstAvailable()
+        break
+      case 'available':
+        this.loadBalancer = new LoadBalancer.CounterAvailable()
+        break
+    }
   }
 }
 
@@ -338,6 +361,7 @@ interface ServicesStatus {
   requests: number
   services: number
   disabled: number
+  balancer: string
 }
 interface StatusBadges {
   services: number
