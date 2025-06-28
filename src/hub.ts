@@ -109,6 +109,10 @@ export class Hub {
         this.proxies.set(state.id, sender)
         return state.id
       })
+      .post('hub/balancer/set', ({ body: { path, type }, state: { permissions } }) => {
+        if (!permissions.has('owner')) throw 'unauthorized'
+        this.services.get(path)?.setBalancer(type)
+      })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
