@@ -37,6 +37,7 @@ export class Hub {
   merger = new HubMerger()
   proxies = new Map<string, Sender>()
   constructor(address = paddr(Bun.env.HUBLISTEN)) {
+    const services = this.services
     const statusState = new LazyState<StatusState>(() => ({
       requests,
       services: this.services.map(a => a.status),
@@ -149,22 +150,36 @@ export class Hub {
       .postOther(other, async ({ body }, path) => {
         const service = this.services.get(path)
         if (!service) throw 'api not found'
-        const s = service.next()
+        const s = await service.next()
         if (!s) throw 'api not found'
         service.requests += 1
         requests += 1
         statusState.setNeedsUpdate()
-        return await s.sender.send(path, body)
+        try {
+          s.sending += 1
+          return await s.sender.send(path, body)
+        } finally {
+          s.sending -= 1
+          service.completed(s)
+        }
       })
-      .streamOther(other, ({ body }, path) => {
-        const service = this.services.get(path)
+      .streamOther(other, async function* ({ body }, path) {
+        const service = services.get(path)
         if (!service) throw 'api not found'
-        const s = service.next()
+        const s = await service.next()
         if (!s) throw 'api not found'
         service.requests += 1
         requests += 1
+        s.sending += 1
         statusState.setNeedsUpdate()
-        return s.sender.values(path, body)
+        try {
+          for await (const value of s.sender.values(path, body)) {
+            yield value
+          }
+        } finally {
+          s.sending -= 1
+          service.completed(s)
+        }
       })
       .onDisconnect((state, sender) => {
         if (auth.sender === sender) {
@@ -276,6 +291,7 @@ class Services {
   requests = 0
   services: Service[] = []
   disabled: Service[] = []
+  pending: ((service: Service | undefined) => void)[] = []
   loadBalancer: LoadBalancer.Type
   constructor(name: string) {
     this.name = name
@@ -329,8 +345,14 @@ class Services {
     const index = this.disabled.findIndex(a => a.sender === sender)
     if (index >= 0) this.disabled.splice(index, 1)
   }
-  next() {
+  private _next() {
     return this.loadBalancer.next(this.services)
+  }
+  async next(): Promise<Service | undefined> {
+    if (this.pending.length > 0) return new Promise(success => this.pending.push(service => success(service)))
+    const service = this._next()
+    if (service) return service
+    return new Promise(success => this.pending.push(service => success(service)))
   }
   get status(): ServicesStatus {
     return {
@@ -357,6 +379,10 @@ class Services {
         this.loadBalancer = new LoadBalancer.CounterAvailable()
         break
     }
+  }
+  completed(service: Service) {
+    if (service.sending > 0 || this.pending.length === 0) return
+    this.pending.shift()?.(service)
   }
 }
 
