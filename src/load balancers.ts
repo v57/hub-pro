@@ -1,12 +1,18 @@
 import type { Service, Sender } from './hub'
 
+export type Name = 'random' | 'counter' | 'first' | 'available'
+
 export interface Type {
+  name: Name
   next(services: Service[]): Service | undefined
   add(services: Service[], item: Service): void
   remove(services: Service[], item: Sender): boolean
 }
 
 export class Random implements Type {
+  get name(): Name {
+    return 'random'
+  }
   next(services: Service[]): Service | undefined {
     if (services.length === 0) return
     return services[Math.floor(Math.random() * services.length)]
@@ -23,6 +29,9 @@ export class Random implements Type {
 }
 
 export class Counter extends Random {
+  get name(): Name {
+    return 'counter'
+  }
   index = 0
   next(services: Service[]): Service | undefined {
     if (services.length === 0) return
@@ -40,12 +49,18 @@ export class Counter extends Random {
 }
 
 export class FirstAvailable extends Random {
+  get name(): Name {
+    return 'first'
+  }
   next(services: Service[]): Service | undefined {
     return services.find(a => !a.sending)
   }
 }
 
 export class CounterAvailable extends Counter {
+  get name(): Name {
+    return 'available'
+  }
   next(services: Service[]): Service | undefined {
     if (services.length === 0) return
     let index = this.index + 1
