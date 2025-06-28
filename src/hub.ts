@@ -349,9 +349,16 @@ class Services {
     return this.loadBalancer.next(this.services)
   }
   async next(): Promise<Service | undefined> {
-    if (this.pending.length > 0) return new Promise(success => this.pending.push(service => success(service)))
+    if (this.pending.length > 0) return this.addPending()
     const service = this._next()
     if (service) return service
+    return this.addPending()
+  }
+  private addPending(): Promise<Service | undefined> {
+    if (settings.data.pendingLimit > 0) {
+      const deleteCount = this.pending.length + 1 - settings.data.pendingLimit
+      if (deleteCount > 0) this.pending.splice(0, deleteCount)
+    }
     return new Promise(success => this.pending.push(service => success(service)))
   }
   get status(): ServicesStatus {
