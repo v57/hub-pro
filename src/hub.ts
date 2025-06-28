@@ -201,7 +201,7 @@ export class Hub {
         context.add(s)
       }
       const enabled = isAuth || apiPermissions.allowsService(service.name, state.permissions)
-      service.add({ sender, state, enabled }, context)
+      service.add({ sender, state, enabled, sending: 0 }, context)
       console.log('Service', s, service.services.length)
     })
     console.log('Added', services.length, 'services')
@@ -251,9 +251,10 @@ export class Hub {
 
 const other = () => true
 
-interface Service {
+export interface Service {
   state: State
   sender: Sender
+  sending: number
   enabled: boolean
 }
 
