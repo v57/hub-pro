@@ -111,6 +111,11 @@ export class Hub {
       })
       .post('hub/balancer/set', ({ body: { path, type }, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
+        settings.updateApi(path, settings => {
+          if ((settings.loadBalancer ?? 'counter') === type) return false
+          settings.loadBalancer = type
+          return true
+        })
         this.services.get(path)?.setBalancer(type)
       })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
