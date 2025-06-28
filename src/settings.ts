@@ -4,6 +4,7 @@ interface Settings {
   merge: string[]
   proxies: string[]
   api: { [key: string]: ApiSettings | undefined }
+  pendingLimit: number
 }
 interface ApiSettings {
   loadBalancer?: LoadBalancer
@@ -14,6 +15,7 @@ class HubSettings {
     merge: [],
     proxies: [],
     api: {},
+    pendingLimit: 0,
   }
   private isSavePending = false
   async load() {
@@ -22,6 +24,7 @@ class HubSettings {
       this.data.merge ??= []
       this.data.proxies ??= []
       this.data.api ??= {}
+      this.data.pendingLimit ??= 0
       console.log(this.data)
     } catch {}
     return this
