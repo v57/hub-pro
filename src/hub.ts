@@ -6,6 +6,10 @@ import { ApiPermissions } from './permissions.ts'
 import { HubMerger, ServiceUpdateContext } from './merge.ts'
 import { settings } from './settings.ts'
 import { publicKey } from './keychain.ts'
+import * as LoadBalancer from './load balancers.ts'
+
+export type { Sender } from 'channel/client'
+
 const auth = new Authorization()
 await auth.load()
 const apiPermissions = await new ApiPermissions().load()
@@ -136,22 +140,22 @@ export class Hub {
       .postOther(other, async ({ body }, path) => {
         const service = this.services.get(path)
         if (!service) throw 'api not found'
-        const sender = service.next()
-        if (!sender) throw 'api not found'
+        const s = service.next()
+        if (!s) throw 'api not found'
         service.requests += 1
         requests += 1
         statusState.setNeedsUpdate()
-        return await sender.send(path, body)
+        return await s.sender.send(path, body)
       })
       .streamOther(other, ({ body }, path) => {
         const service = this.services.get(path)
         if (!service) throw 'api not found'
-        const sender = service.next()
-        if (!sender) throw 'api not found'
+        const s = service.next()
+        if (!s) throw 'api not found'
         service.requests += 1
         requests += 1
         statusState.setNeedsUpdate()
-        return sender.values(path, body)
+        return s.sender.values(path, body)
       })
       .onDisconnect((state, sender) => {
         if (auth.sender === sender) {
@@ -263,14 +267,15 @@ class Services {
   requests = 0
   services: Service[] = []
   disabled: Service[] = []
-  index = 0
+  loadBalancer: LoadBalancer.Type
   constructor(name: string) {
     this.name = name
+    this.loadBalancer = new LoadBalancer.Counter()
   }
   add(service: Service, context: ServiceUpdateContext) {
     if (service.enabled) {
       if (this.services.findIndex(a => a.sender === service.sender) === -1) {
-        this.services.push(service)
+        this.loadBalancer.add(this.services, service)
         if (this.services.length === 1) context.add(this.name)
       }
     } else {
@@ -285,7 +290,7 @@ class Services {
       if (s.state.permissions.has(permission)) {
         enabled.add(s)
         s.enabled = true
-        this.services.push(s)
+        this.loadBalancer.add(this.services, s)
         if (this.services.length === 1) context.add(this.name)
       }
     })
@@ -294,34 +299,29 @@ class Services {
     return enabled.size
   }
   removePermission(permission: string, context: ServiceUpdateContext): number {
-    let disabled = new Set<Service>()
+    let disabled: Service[] = []
     this.services.forEach(s => {
       if (s.state.permissions.has(permission)) {
-        disabled.add(s)
+        disabled.push(s)
         s.enabled = false
         this.disabled.push(s)
       }
     })
-    if (!disabled.size) return 0
-    this.services = this.services.filter(a => !disabled.has(a))
+    if (!disabled.length) return 0
+    for (const service of disabled) {
+      this.loadBalancer.remove(this.services, service.sender)
+    }
     if (this.services.length === 0) context.remove(this.name)
-    return disabled.size
+    return disabled.length
   }
   remove(sender: Sender, context: ServiceUpdateContext) {
-    let index = this.services.findIndex(a => a.sender === sender)
-    if (index >= 0) {
-      this.services.splice(index, 1)
-      if (this.services.length === 0) {
-        context.remove(this.name)
-      }
-    }
-    index = this.disabled.findIndex(a => a.sender === sender)
+    this.loadBalancer.remove(this.services, sender)
+    if (this.services.length === 0) context.remove(this.name)
+    const index = this.disabled.findIndex(a => a.sender === sender)
     if (index >= 0) this.disabled.splice(index, 1)
   }
   next() {
-    if (!this.services.length) return
-    const id = this.index++ % this.services.length
-    return this.services.at(id)?.sender
+    return this.loadBalancer.next(this.services)
   }
   get status(): ServicesStatus {
     return { name: this.name, services: this.services.length, disabled: this.disabled.length, requests: this.requests }
