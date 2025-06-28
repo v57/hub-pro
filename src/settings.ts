@@ -1,17 +1,28 @@
+import type { Name as LoadBalancer } from './load balancers'
+
 interface Settings {
   merge: string[]
   proxies: string[]
+  api: { [key: string]: ApiSettings | undefined }
+}
+interface ApiSettings {
+  loadBalancer?: LoadBalancer
 }
 
 class HubSettings {
   data: Settings = {
     merge: [],
     proxies: [],
+    api: {},
   }
   private isSavePending = false
   async load() {
     try {
       this.data = await Bun.file('hub.json').json()
+      this.data.merge ??= []
+      this.data.proxies ??= []
+      this.data.api ??= {}
+      console.log(this.data)
     } catch {}
     return this
   }
@@ -45,6 +56,12 @@ class HubSettings {
     if (i == -1) return
     this.data.proxies.splice(i, 1)
     this.setNeedsSave()
+  }
+  updateApi(path: string, update: (settings: ApiSettings) => boolean) {
+    const settings = this.data.api[path] ?? {}
+    if (update(settings)) {
+      this.setNeedsSave()
+    }
   }
 }
 
