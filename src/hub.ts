@@ -119,6 +119,13 @@ export class Hub {
         })
         this.services.get(path)?.setBalancer(type)
       })
+      .post('hub/balancer/limit', ({ body: { limit }, state: { permissions } }) => {
+        if (!permissions.has('owner')) throw 'unauthorized'
+        if (settings.data.pendingLimit !== limit) {
+          settings.data.pendingLimit = limit
+          settings.setNeedsSave()
+        }
+      })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
