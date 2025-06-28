@@ -37,3 +37,11 @@ export class CounterLoadBalancer extends RandomLoadBalancer {
     this.services.splice(index, -1)
   }
 }
+
+export class FirstAvailableLoadBalancer extends RandomLoadBalancer {
+  next(): Service {
+    const service = this.services.find(a => !a.sending)
+    if (!service) throw 'api not available'
+    return service
+  }
+}
