@@ -45,3 +45,30 @@ export class FirstAvailableLoadBalancer extends RandomLoadBalancer {
     return service
   }
 }
+
+export class CounterAvailableLoadBalancer extends CounterLoadBalancer {
+  next(): Service {
+    if (this.services.length === 0) throw 'api not available'
+    let index = this.index + 1
+    if (index >= this.services.length) index = 0
+    for (let i = index; i < this.services.length; i += 1) {
+      if (!this.services[i].sending) {
+        this.index = i
+        return this.services[i]
+      }
+    }
+    for (let i = 0; i < index; i += 1) {
+      if (!this.services[i].sending) {
+        this.index = i
+        return this.services[i]
+      }
+    }
+    throw 'api not available'
+  }
+  remove(service: Service) {
+    const index = this.services.findIndex(s => s.sender === service.sender)
+    if (index === -1) return
+    if (index < this.index) this.index -= 1
+    this.services.splice(index, -1)
+  }
+}
