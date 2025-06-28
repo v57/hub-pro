@@ -1,12 +1,12 @@
-import type { Service } from './hub'
+import type { Service, Sender } from './hub'
 
-export interface LoadBalancer {
+export interface Type {
   next(services: Service[]): Service | undefined
   add(services: Service[], item: Service): void
-  remove(services: Service[], item: Service): void
+  remove(services: Service[], item: Sender): boolean
 }
 
-export class RandomLoadBalancer implements LoadBalancer {
+export class Random implements Type {
   next(services: Service[]): Service | undefined {
     if (services.length === 0) return
     return services[Math.floor(Math.random() * services.length)]
@@ -14,14 +14,15 @@ export class RandomLoadBalancer implements LoadBalancer {
   add(services: Service[], service: Service) {
     services.push(service)
   }
-  remove(services: Service[], service: Service) {
-    const index = services.findIndex(s => s.sender === service.sender)
-    if (index === -1) return
+  remove(services: Service[], sender: Sender) {
+    const index = services.findIndex(s => s.sender === sender)
+    if (index === -1) return false
     services.splice(index, -1)
+    return true
   }
 }
 
-export class CounterLoadBalancer extends RandomLoadBalancer {
+export class Counter extends Random {
   index = 0
   next(services: Service[]): Service | undefined {
     if (services.length === 0) return
@@ -29,21 +30,22 @@ export class CounterLoadBalancer extends RandomLoadBalancer {
     if (this.index >= services.length) this.index = 0
     return services[this.index]
   }
-  remove(services: Service[], service: Service) {
-    const index = services.findIndex(s => s.sender === service.sender)
-    if (index === -1) return
+  remove(services: Service[], sender: Sender) {
+    const index = services.findIndex(s => s.sender === sender)
+    if (index === -1) return false
     if (index < this.index) this.index -= 1
     services.splice(index, -1)
+    return true
   }
 }
 
-export class FirstAvailableLoadBalancer extends RandomLoadBalancer {
+export class FirstAvailable extends Random {
   next(services: Service[]): Service | undefined {
     return services.find(a => !a.sending)
   }
 }
 
-export class CounterAvailableLoadBalancer extends CounterLoadBalancer {
+export class CounterAvailable extends Counter {
   next(services: Service[]): Service | undefined {
     if (services.length === 0) return
     let index = this.index + 1
@@ -61,10 +63,11 @@ export class CounterAvailableLoadBalancer extends CounterLoadBalancer {
       }
     }
   }
-  remove(services: Service[], service: Service) {
-    const index = services.findIndex(s => s.sender === service.sender)
-    if (index === -1) return
+  remove(services: Service[], sender: Sender) {
+    const index = services.findIndex(s => s.sender === sender)
+    if (index === -1) return false
     if (index < this.index) this.index -= 1
     services.splice(index, -1)
+    return true
   }
 }
