@@ -309,6 +309,10 @@ class Services {
       if (this.services.findIndex(a => a.sender === service.sender) === -1) {
         this.loadBalancer.add(this.services, service)
         if (this.services.length === 1) context.add(this.name)
+        if (this.pending.length) {
+          const service = this.loadBalancer.next(this.services)
+          this.pending.shift()?.(service)
+        }
       }
     } else {
       if (this.disabled.findIndex(a => a.sender === service.sender) === -1) {
@@ -352,7 +356,7 @@ class Services {
     const index = this.disabled.findIndex(a => a.sender === sender)
     if (index >= 0) this.disabled.splice(index, 1)
   }
-  private _next() {
+  private _next(): Service | undefined {
     return this.loadBalancer.next(this.services)
   }
   async next(): Promise<Service | undefined> {
