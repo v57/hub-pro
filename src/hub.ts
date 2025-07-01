@@ -302,7 +302,7 @@ class Services {
   loadBalancer: LoadBalancer.Type
   constructor(name: string) {
     this.name = name
-    this.loadBalancer = new LoadBalancer.Counter()
+    this.loadBalancer = new LoadBalancer.FirstAvailable()
   }
   add(service: Service, context: ServiceUpdateContext) {
     if (service.enabled) {
@@ -376,6 +376,7 @@ class Services {
       requests: this.requests,
       balancer: this.loadBalancer.name,
       pending: this.pending.length,
+      running: this.services.reduce((a, b) => a + b.sending, 0),
     }
   }
   setBalancer(name: LoadBalancer.Name) {
@@ -411,8 +412,9 @@ interface ServicesStatus {
   requests: number
   services: number
   disabled: number
-  balancer: string
+  balancer: LoadBalancer.Name
   pending: number
+  running: number
 }
 interface StatusBadges {
   services: number
