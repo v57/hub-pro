@@ -7,6 +7,7 @@ import { HubMerger, ServiceUpdateContext } from './merge.ts'
 import { settings } from './settings.ts'
 import { publicKey } from './keychain.ts'
 import * as LoadBalancer from './load balancers.ts'
+import type { Cancellable } from 'channel/channel'
 
 export type { Sender } from 'channel/client'
 
@@ -21,7 +22,6 @@ interface State {
   id?: string
   services: string[]
   permissions: Set<string>
-  requests: number
 }
 
 interface PendingAuthorization {
@@ -159,16 +159,17 @@ export class Hub {
         if (!service) throw 'api not found'
         const s = await service.next()
         if (!s) throw 'api not found'
+        if (task?.isCancelled) throw 'cancelled'
         service.requests += 1
         requests += 1
         statusState.setNeedsUpdate()
+        const request = s.sender.request(path, body)
         try {
-          s.sending += 1
-          const request = s.sender.request(path, body)
+          if (task) s.sending.add(task)
           task?.onCancel(request.cancel)
           return await request.response
         } finally {
-          s.sending -= 1
+          if (task) s.sending.delete(task)
           service.completed(s)
         }
       })
@@ -179,14 +180,14 @@ export class Hub {
         if (!s) throw 'api not found'
         service.requests += 1
         requests += 1
-        s.sending += 1
+        s.streams += 1
         statusState.setNeedsUpdate()
         try {
           for await (const value of s.sender.values(path, body)) {
             yield value
           }
         } finally {
-          s.sending -= 1
+          s.streams -= 1
           service.completed(s)
         }
       })
@@ -211,7 +212,6 @@ export class Hub {
             id,
             permissions,
             services: [],
-            requests: 0,
           }
         },
         onConnect: (connection: BodyContext<State>) => {
@@ -238,7 +238,7 @@ export class Hub {
         context.add(s)
       }
       const enabled = isAuth || apiPermissions.allowsService(service.name, state.permissions)
-      service.add({ sender, state, enabled, sending: 0 }, context)
+      service.add({ sender, state, enabled, sending: new Set(), streams: 0 }, context)
       console.log('Service', s, service.services.length)
     })
     console.log('Added', services.length, 'services')
@@ -291,7 +291,8 @@ const other = () => true
 export interface Service {
   state: State
   sender: Sender
-  sending: number
+  sending: Set<Cancellable>
+  streams: number
   enabled: boolean
 }
 
@@ -347,13 +348,14 @@ class Services {
     })
     if (!disabled.length) return 0
     for (const service of disabled) {
-      this.loadBalancer.remove(this.services, service.sender)
+      this.loadBalancer.remove(this.services, service.sender)?.sending.forEach(a => a.cancel())
     }
     this.disableServiceIfNeeded(context)
     return disabled.length
   }
   remove(sender: Sender, context: ServiceUpdateContext) {
-    this.loadBalancer.remove(this.services, sender)?.sending.forEach(a => a.cancel())
+    const s = this.loadBalancer.remove(this.services, sender)
+    s?.sending.forEach(a => a.cancel())
     this.disableServiceIfNeeded(context)
     const index = this.disabled.findIndex(a => a.sender === sender)
     if (index >= 0) this.disabled.splice(index, 1)
@@ -390,7 +392,7 @@ class Services {
       requests: this.requests,
       balancer: this.loadBalancer.name,
       pending: this.pending.length,
-      running: this.services.reduce((a, b) => a + b.sending, 0),
+      running: this.services.reduce((a, b) => a + b.sending.size + b.streams, 0),
     }
   }
   setBalancer(name: LoadBalancer.Name) {
@@ -411,7 +413,7 @@ class Services {
     }
   }
   completed(service: Service) {
-    if (service.sending > 0 || this.pending.length === 0) return
+    if (service.sending.size > 0 || this.pending.length === 0) return
     this.pending.shift()?.(service)
   }
 }

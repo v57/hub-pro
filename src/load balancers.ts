@@ -55,7 +55,7 @@ export class FirstAvailable extends Random {
     return 'first'
   }
   next(services: Service[]): Service | undefined {
-    return services.find(a => !a.sending)
+    return services.find(a => !a.sending.size)
   }
 }
 
@@ -68,13 +68,13 @@ export class CounterAvailable extends Counter {
     let index = this.index + 1
     if (index >= services.length) index = 0
     for (let i = index; i < services.length; i += 1) {
-      if (!services[i].sending) {
+      if (!services[i].sending.size) {
         this.index = i
         return services[i]
       }
     }
     for (let i = 0; i < index; i += 1) {
-      if (!services[i].sending) {
+      if (!services[i].sending.size) {
         this.index = i
         return services[i]
       }
