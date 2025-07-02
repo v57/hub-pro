@@ -154,7 +154,7 @@ export class Hub {
       .stream('hub/permissions/pending', () => pendingAuthorizations.makeIterator())
       .stream('hub/status', () => statusState.makeIterator())
       .stream('hub/status/badges', () => statusBadges.makeIterator())
-      .postOther(other, async ({ body, path }) => {
+      .postOther(other, async ({ body, path, task }) => {
         const service = this.services.get(path)
         if (!service) throw 'api not found'
         const s = await service.next()
@@ -164,7 +164,9 @@ export class Hub {
         statusState.setNeedsUpdate()
         try {
           s.sending += 1
-          return await s.sender.send(path, body)
+          const request = s.sender.request(path, body)
+          task?.onCancel(request.cancel)
+          return await request.response
         } finally {
           s.sending -= 1
           service.completed(s)
