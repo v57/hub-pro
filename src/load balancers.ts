@@ -23,7 +23,7 @@ export class Random implements Type {
   remove(services: Service[], sender: Sender) {
     const index = services.findIndex(s => s.sender === sender)
     if (index === -1) return false
-    services.splice(index, -1)
+    services.splice(index, 1)
     return true
   }
 }
