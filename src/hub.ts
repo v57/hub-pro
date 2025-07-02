@@ -349,14 +349,22 @@ class Services {
     for (const service of disabled) {
       this.loadBalancer.remove(this.services, service.sender)
     }
-    if (this.services.length === 0) context.remove(this.name)
+    this.disableServiceIfNeeded(context)
     return disabled.length
   }
   remove(sender: Sender, context: ServiceUpdateContext) {
-    this.loadBalancer.remove(this.services, sender)
-    if (this.services.length === 0) context.remove(this.name)
+    this.loadBalancer.remove(this.services, sender)?.sending.forEach(a => a.cancel())
+    this.disableServiceIfNeeded(context)
     const index = this.disabled.findIndex(a => a.sender === sender)
     if (index >= 0) this.disabled.splice(index, 1)
+  }
+  private disableServiceIfNeeded(context: ServiceUpdateContext) {
+    if (this.services.length) return
+    context.remove(this.name)
+    if (this.pending.length) {
+      this.pending.forEach(a => a(undefined))
+      this.pending = []
+    }
   }
   private _next(): Service | undefined {
     return this.loadBalancer.next(this.services)
