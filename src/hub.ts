@@ -154,7 +154,7 @@ export class Hub {
       .stream('hub/permissions/pending', () => pendingAuthorizations.makeIterator())
       .stream('hub/status', () => statusState.makeIterator())
       .stream('hub/status/badges', () => statusBadges.makeIterator())
-      .postOther(other, async ({ body }, path) => {
+      .postOther(other, async ({ body, path }) => {
         const service = this.services.get(path)
         if (!service) throw 'api not found'
         const s = await service.next()
@@ -170,7 +170,7 @@ export class Hub {
           service.completed(s)
         }
       })
-      .streamOther(other, async function* ({ body }, path) {
+      .streamOther(other, async function* ({ body, path }) {
         const service = services.get(path)
         if (!service) throw 'api not found'
         const s = await service.next()
