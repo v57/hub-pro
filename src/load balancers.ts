@@ -6,7 +6,7 @@ export interface Type {
   name: Name
   next(services: Service[]): Service | undefined
   add(services: Service[], item: Service): void
-  remove(services: Service[], item: Sender): boolean
+  remove(services: Service[], item: Sender): Service | undefined
 }
 
 export class Random implements Type {
@@ -22,9 +22,10 @@ export class Random implements Type {
   }
   remove(services: Service[], sender: Sender) {
     const index = services.findIndex(s => s.sender === sender)
-    if (index === -1) return false
+    if (index === -1) return
+    const service = services[index]
     services.splice(index, 1)
-    return true
+    return service
   }
 }
 
@@ -41,10 +42,11 @@ export class Counter extends Random {
   }
   remove(services: Service[], sender: Sender) {
     const index = services.findIndex(s => s.sender === sender)
-    if (index === -1) return false
+    if (index === -1) return
     if (index < this.index) this.index -= 1
-    services.splice(index, -1)
-    return true
+    const service = services[index]
+    services.splice(index, 1)
+    return service
   }
 }
 
@@ -80,9 +82,10 @@ export class CounterAvailable extends Counter {
   }
   remove(services: Service[], sender: Sender) {
     const index = services.findIndex(s => s.sender === sender)
-    if (index === -1) return false
+    if (index === -1) return
     if (index < this.index) this.index -= 1
-    services.splice(index, -1)
-    return true
+    const service = services[index]
+    services.splice(index, 1)
+    return service
   }
 }
