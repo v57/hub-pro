@@ -305,7 +305,7 @@ class Services {
   loadBalancer: LoadBalancer.Type
   constructor(name: string) {
     this.name = name
-    this.loadBalancer = new LoadBalancer.FirstAvailable()
+    this.loadBalancer = new LoadBalancer.Counter()
   }
   add(service: Service, context: ServiceUpdateContext) {
     if (service.enabled) {
