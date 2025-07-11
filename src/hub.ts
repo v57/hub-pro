@@ -68,11 +68,12 @@ export class Hub {
       statusBadges.setNeedsUpdate()
     }
     this.channel
-      .post('hub/service/update', ({ body: { add, remove, addApps }, state, sender }) => {
+      .post('hub/service/update', ({ body: { add, remove, addApps, removeApps }, state, sender }) => {
         const context = this.merger.context()
         if (add && Array.isArray(add)) this.addServices(sender, state, add, context)
         if (remove && Array.isArray(remove)) this.removeServices(sender, state, remove, context)
         if (addApps && Array.isArray(addApps)) this.apps.add(sender, state, addApps)
+        if (removeApps && Array.isArray(removeApps)) this.apps.remove(sender, state, removeApps)
         context.applyChanges()
         sendUpdates()
       })
@@ -200,6 +201,7 @@ export class Hub {
         }
         const context = this.merger.context()
         state.services.forEach(s => this.services.get(s)?.remove(sender, context))
+        this.apps.removeSender(sender, state)
         if (state.id) this.proxies.delete(state.id)
         context.applyChanges()
         statusState.setNeedsUpdate()
@@ -445,6 +447,26 @@ class Apps {
       state.senders.add(sender)
     }
   }
+  removeSender(sender: Sender, senderState: State) {
+    senderState.apps.forEach(path => {
+      this.removeOne(sender, path)
+    })
+    senderState.apps = new Set()
+  }
+  remove(sender: Sender, senderState: State, paths: string[]) {
+    for (const path of paths) {
+      if (!senderState.apps.has(path)) continue
+      senderState.apps.delete(path)
+      this.removeOne(sender, path)
+    }
+  }
+  removeOne(sender: Sender, path: string) {
+    let state: AppState | undefined = this.states.get(path)
+    if (!state) return
+    state.senders.delete(sender)
+    const i = this.headers.findIndex(h => h.path === path)
+    if (i !== -1) this.headers[i].services = Math.max((this.headers[i].services ?? 0) - 1, 0)
+  }
 }
 interface AppState {
   senders: Set<Sender>
@@ -455,6 +477,7 @@ interface AppHeader {
   type: 'app'
   name: string
   path: string
+  services?: number
 }
 interface StatusState {
   requests: number
