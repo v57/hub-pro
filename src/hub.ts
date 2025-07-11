@@ -201,10 +201,12 @@ export class Hub {
         }
         const context = this.merger.context()
         state.services.forEach(s => this.services.get(s)?.remove(sender, context))
+        const sendUpdates = state.apps.size > 0
         this.apps.removeSender(sender, state)
         if (state.id) this.proxies.delete(state.id)
         context.applyChanges()
         statusState.setNeedsUpdate()
+        if (sendUpdates) statusBadges.setNeedsUpdate()
         if (sender === auth.sender) {
           delete auth.sender
         }
