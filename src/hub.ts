@@ -20,7 +20,8 @@ const paddr = (a?: string) => (a ? (isNaN(Number(a)) ? a : Number(a)) : 1997)
 interface State {
   key?: string
   id?: string
-  services: string[]
+  services: Set<string>
+  apps: Set<string>
   permissions: Set<string>
 }
 
@@ -36,6 +37,7 @@ export class Hub {
   connections = new Set<BodyContext<State>>()
   merger = new HubMerger()
   proxies = new Map<string, Sender>()
+  apps = new Apps()
   constructor(address = paddr(Bun.env.HUBLISTEN)) {
     const services = this.services
     const statusState = new LazyState<StatusState>(() => ({
@@ -66,10 +68,11 @@ export class Hub {
       statusBadges.setNeedsUpdate()
     }
     this.channel
-      .post('hub/service/update', ({ body: { add, remove }, state, sender }) => {
+      .post('hub/service/update', ({ body: { add, remove, addApps }, state, sender }) => {
         const context = this.merger.context()
         if (add && Array.isArray(add)) this.addServices(sender, state, add, context)
         if (remove && Array.isArray(remove)) this.removeServices(sender, state, remove, context)
+        if (addApps && Array.isArray(addApps)) this.apps.add(sender, state, addApps)
         context.applyChanges()
         sendUpdates()
       })
@@ -211,7 +214,8 @@ export class Hub {
             key: headers.get('auth') ?? undefined,
             id,
             permissions,
-            services: [],
+            services: new Set<string>(),
+            apps: new Set<string>(),
           }
         },
         onConnect: (connection: BodyContext<State>) => {
@@ -228,8 +232,9 @@ export class Hub {
     this.services.map(a => a)
   }
   addServices(sender: Sender, state: State, services: string[], context: ServiceUpdateContext) {
-    state.services = state.services.concat(services) // very bad
     services.forEach(s => {
+      if (state.services.has(s)) return
+      state.services.add(s)
       const isAuth = this.checkAuthorization(sender, state, s)
       let service = this.services.get(s)
       if (!service) {
@@ -245,8 +250,9 @@ export class Hub {
     if (state.permissions.has('auth')) this.reauthorizeServices()
   }
   removeServices(sender: Sender, state: State, services: string[], context: ServiceUpdateContext) {
-    state.services = state.services.filter(a => services.includes(a)) // very unoptimized
     services.forEach(s => {
+      if (!state.services.has(s)) return
+      state.services.delete(s)
       let service = this.services.get(s)
       if (!service) return
       service.remove(sender, context)
@@ -282,6 +288,7 @@ export class Hub {
     return {
       services: this.services.size,
       security: unauthorized.size,
+      apps: this.apps.headers,
     }
   }
 }
@@ -418,6 +425,37 @@ class Services {
   }
 }
 
+class Apps {
+  states = new ObjectMap<string, AppState>()
+  headers: AppHeader[] = []
+  add(sender: Sender, senderState: State, headers: AppHeader[]) {
+    headers.forEach(header => {
+      this.addOne(sender, senderState, header)
+    })
+  }
+  addOne(sender: Sender, senderState: State, header: AppHeader) {
+    if (senderState.apps.has(header.path)) return
+    senderState.apps.add(header.path)
+    let state: AppState | undefined = this.states.get(header.path)
+    if (!state) {
+      state = { senders: new Set([sender]), header }
+      this.states.set(header.path, state)
+      this.headers.push(header)
+    } else {
+      state.senders.add(sender)
+    }
+  }
+}
+interface AppState {
+  senders: Set<Sender>
+  header: AppHeader
+}
+
+interface AppHeader {
+  type: 'app'
+  name: string
+  path: string
+}
 interface StatusState {
   requests: number
   services: ServicesStatus[]
@@ -435,4 +473,5 @@ interface ServicesStatus {
 interface StatusBadges {
   services: number
   security: number
+  apps: AppHeader[]
 }
