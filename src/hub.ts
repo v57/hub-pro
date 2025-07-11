@@ -442,8 +442,11 @@ class Apps {
     if (!state) {
       state = { senders: new Set([sender]), header }
       this.states.set(header.path, state)
+      header.services = 1
       this.headers.push(header)
     } else {
+      const i = this.headers.findIndex(h => h.path === header.path)
+      if (i !== -1) this.headers[i].services = (this.headers[i].services ?? 0) + 1
       state.senders.add(sender)
     }
   }
