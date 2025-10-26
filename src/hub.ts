@@ -68,8 +68,23 @@ export class Hub {
       statusBadges.setNeedsUpdate()
     }
     this.channel
-      .post('hub/service/update', ({ body: { add, remove, addApps, removeApps }, state, sender }) => {
+      .post('hub/service/update', ({ body: { add, remove, addApps, removeApps, services, apps }, state, sender }) => {
         const context = this.merger.context()
+        if (services && Array.isArray(services)) {
+          const paths = new Set((apps as ServiceHeader[]).map(a => a.path))
+          const add = paths.difference(state.services)
+          const remove = state.services.difference(paths)
+          this.addServices(sender, state, Array.from(add), context)
+          this.removeServices(sender, state, Array.from(remove), context)
+        }
+        if (apps && Array.isArray(apps)) {
+          const paths = new Set((apps as AppHeader[]).map(a => a.path))
+          const add = paths.difference(state.apps)
+          const remove = state.apps.difference(paths)
+          const newApps = (apps as AppHeader[]).filter(app => add.has(app.path))
+          this.apps.add(sender, state, newApps)
+          this.apps.remove(sender, state, Array.from(remove))
+        }
         if (add && Array.isArray(add)) this.addServices(sender, state, add, context)
         if (remove && Array.isArray(remove)) this.removeServices(sender, state, remove, context)
         if (addApps && Array.isArray(addApps)) this.apps.add(sender, state, addApps)
@@ -483,6 +498,10 @@ interface AppHeader {
   name: string
   path: string
   services?: number
+}
+interface ServiceHeader {
+  path: string
+  // reserved for future service options
 }
 interface StatusState {
   requests: number
