@@ -112,7 +112,6 @@ class Connection {
     })
   }
   async update(add: string[], remove: string[]) {
-    console.log('gay')
     try {
       await this.channel?.send('hub/service/update', { add, remove })
     } catch (error) {
