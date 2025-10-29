@@ -352,7 +352,7 @@ class Services {
   addPermission(permission: string, context: ServiceUpdateContext): number {
     let enabled = new Set<Service>()
     this.disabled.forEach(s => {
-      if (s.state.permissions.has(permission)) {
+      if (!s.state.permissions.has(permission)) {
         enabled.add(s)
         s.enabled = true
         this.loadBalancer.add(this.services, s)
