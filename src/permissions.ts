@@ -30,6 +30,7 @@ export class ApiPermissions {
   }
   allowsService(service: string, groups: Set<string>): boolean {
     if (groups.size === 0) return false
+    if (groups.has('owner')) return true
     const s = this.services[service]
     if (!s) return false
     return !s.isDisjointFrom(groups)
