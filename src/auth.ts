@@ -20,7 +20,7 @@ export class Authorization {
       id?: string
       permissions: string[]
     }
-    if (id && !permissions.includes('owner')) permissions.push(id)
+    if (id) permissions.push(id)
     return { id, permissions: new Set(permissions) }
   }
   // Returns permissions list
