@@ -71,7 +71,7 @@ export class Hub {
       .post('hub/service/update', ({ body: { add, remove, addApps, removeApps, services, apps }, state, sender }) => {
         const context = this.merger.context()
         if (services && Array.isArray(services)) {
-          const paths = new Set((apps as ServiceHeader[]).map(a => a.path))
+          const paths = new Set((services as ServiceHeader[]).map(a => a.path))
           const add = paths.difference(state.services)
           const remove = state.services.difference(paths)
           this.addServices(sender, state, Array.from(add), context)
