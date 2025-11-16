@@ -16,7 +16,8 @@ const auth = new Authorization()
 await auth.load()
 const apiPermissions = await new ApiPermissions().load()
 const groups = await new PermissionGroups().load()
-const groupsState = new LazyState(() => groups.list()).delay(1)
+const groupsPermissionsState = new LazyState(() => groups.list()).delay(1)
+const groupsState = new LazyState(() => groups.groups).delay(1)
 
 const paddr = (a?: string) => (a ? (isNaN(Number(a)) ? a : Number(a)) : 1997)
 
@@ -80,13 +81,15 @@ export class Hub {
           const remove = state.services.difference(paths)
           this.addServices(sender, state, Array.from(add), context)
           this.removeServices(sender, state, Array.from(remove), context)
+          let didAddPermissions = false
           for (const service of s) {
             const p = service.permissions
             if (p) {
               const group = p.group ?? service.path.split('/')[0]
-              groups.add(`${group}/${p.name}`, service.path)
+              if (groups.add(`${group}/${p.name}`, service.path)) didAddPermissions = true
             }
           }
+          if (didAddPermissions) groupsPermissionsState.setNeedsUpdate()
         }
         if (apps && Array.isArray(apps)) {
           const paths = new Set((apps as AppHeader[]).map(a => a.path))
@@ -156,9 +159,12 @@ export class Hub {
           settings.setNeedsSave()
         }
       })
+      .stream('hub/groups/permissions', () => groupsPermissionsState.makeIterator())
       .stream('hub/groups/list', () => groupsState.makeIterator())
-      .post('hub/groups/add', ({ body: { name } }) => {
+      .post('hub/groups/add', ({ body: { name, permissions } }) => {
         groups.addGroup(name)
+        permissions?.forEach?.((a: string) => groups.add(name, a))
+        groupsState.setNeedsUpdate()
       })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
