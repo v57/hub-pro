@@ -1,6 +1,6 @@
 import { Channel, type Sender, type BodyContext, ObjectMap } from 'channel/server'
 import 'channel/client'
-import { LazyState } from 'channel/more'
+import { LazyState, LazyStates } from 'channel/more'
 import { Authorization } from './auth.ts'
 import { ApiPermissions } from './permissions.ts'
 import { HubMerger, ServiceUpdateContext } from './merge.ts'
@@ -49,6 +49,11 @@ export class Hub {
       services: this.services.map(a => a.status),
       pro: true,
     }))
+    const apiList = new LazyStates<State, unknown>(state => {
+      const allApi = new Set(Object.keys(services.storage))
+      const restricted = groups.restrictedList(state.permissions)
+      return allApi.difference(restricted)
+    })
     const statusBadges = new LazyState<StatusBadges>(() => this.statusBadges)
     const pendingAuthorizations = new LazyState<PendingAuthorization[]>(() => {
       let result: { [key: string]: string[] | undefined } = {}
@@ -72,6 +77,7 @@ export class Hub {
       statusBadges.setNeedsUpdate()
     }
     this.channel
+      .stream('hub/api/list', ({ state }) => apiList.makeIterator(state))
       .post('hub/service/update', ({ body: { add, remove, addApps, removeApps, services, apps }, state, sender }) => {
         const context = this.merger.context()
         if (services && Array.isArray(services)) {
@@ -159,6 +165,7 @@ export class Hub {
           settings.setNeedsSave()
         }
       })
+
       .stream('hub/groups/permissions', () => groupsPermissionsState.makeIterator())
       .stream('hub/groups/list', () => groupsState.makeIterator())
       .post('hub/groups/add', ({ body: { name, permissions } }) => {
