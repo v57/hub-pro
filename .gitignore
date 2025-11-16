@@ -3,4 +3,5 @@ node_modules/
 auth
 auth-service
 permissions.json
+groups.json
 hub.json
