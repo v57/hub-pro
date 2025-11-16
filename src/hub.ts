@@ -8,12 +8,15 @@ import { settings } from './settings.ts'
 import { publicKey } from './keychain.ts'
 import * as LoadBalancer from './load balancers.ts'
 import type { Cancellable } from 'channel/channel'
+import { PermissionGroups } from './permission groups.ts'
 
 export type { Sender } from 'channel/client'
 
 const auth = new Authorization()
 await auth.load()
 const apiPermissions = await new ApiPermissions().load()
+const groups = await new PermissionGroups().load()
+const groupsState = new LazyState(() => groups.list()).delay(1)
 
 const paddr = (a?: string) => (a ? (isNaN(Number(a)) ? a : Number(a)) : 1997)
 
@@ -71,11 +74,19 @@ export class Hub {
       .post('hub/service/update', ({ body: { add, remove, addApps, removeApps, services, apps }, state, sender }) => {
         const context = this.merger.context()
         if (services && Array.isArray(services)) {
-          const paths = new Set((services as ServiceHeader[]).map(a => a.path))
+          const s = services as ServiceHeader[]
+          const paths = new Set(s.map(a => a.path))
           const add = paths.difference(state.services)
           const remove = state.services.difference(paths)
           this.addServices(sender, state, Array.from(add), context)
           this.removeServices(sender, state, Array.from(remove), context)
+          for (const service of s) {
+            const p = service.permissions
+            if (p) {
+              const group = p.group ?? service.path.split('/')[0]
+              groups.add(`${group}/${p.name}`, service.path)
+            }
+          }
         }
         if (apps && Array.isArray(apps)) {
           const paths = new Set((apps as AppHeader[]).map(a => a.path))
@@ -145,6 +156,10 @@ export class Hub {
           settings.setNeedsSave()
         }
       })
+      .stream('hub/groups/list', () => groupsState.makeIterator())
+      .post('hub/groups/add', ({ body: { name } }) => {
+        groups.addGroup(name)
+      })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
@@ -173,9 +188,10 @@ export class Hub {
       .stream('hub/permissions/pending', () => pendingAuthorizations.makeIterator())
       .stream('hub/status', () => statusState.makeIterator())
       .stream('hub/status/badges', () => statusBadges.makeIterator())
-      .postOther(other, async ({ body, path, task }) => {
+      .postOther(other, async ({ body, path, task, state: { permissions } }) => {
         const service = this.services.get(path)
         if (!service) throw 'api not found'
+        if (groups.checkMany(permissions, path)) throw 'permissions required'
         const s = await service.next()
         if (!s) throw 'api not found'
         if (task?.isCancelled) throw 'cancelled'
@@ -192,9 +208,10 @@ export class Hub {
           service.completed(s)
         }
       })
-      .streamOther(other, async function* ({ body, path }) {
+      .streamOther(other, async function* ({ body, path, state: { permissions } }) {
         const service = services.get(path)
         if (!service) throw 'api not found'
+        if (groups.checkMany(permissions, path)) throw 'permissions required'
         const s = await service.next()
         if (!s) throw 'api not found'
         service.requests += 1
@@ -499,10 +516,16 @@ interface AppHeader {
   path: string
   services?: number
 }
+
 interface ServiceHeader {
   path: string
-  // reserved for future service options
+  permissions?: ServicePermissions
 }
+interface ServicePermissions {
+  group?: string
+  name: string
+}
+
 interface StatusState {
   requests: number
   services: ServicesStatus[]
