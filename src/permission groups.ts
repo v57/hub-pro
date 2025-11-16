@@ -1,11 +1,18 @@
 export class PermissionGroups {
   groups = new Map<string, Set<string>>()
   paths = new Map<string, string>()
+  names = new Map<string, Set<string>>()
   restricted = new Set<string>()
   add(name: string, path: string): boolean {
     if (this.paths.has(path)) return false
     this.restricted.add(path)
     this.paths.set(path, name)
+    let nameSet = this.names.get(name)
+    if (nameSet) {
+      nameSet.add(path)
+    } else {
+      this.names.set(name, new Set([path]))
+    }
     return true
   }
   addGroup(group: string) {
@@ -15,10 +22,16 @@ export class PermissionGroups {
   allow(group: string, name: string) {
     this.groups.get(group)?.add(name)
   }
-  restrictedList(group: string): Set<string> {
-    const g = this.groups.get(group)
-    if (!g) return this.restricted
-    return g.difference(this.restricted)
+  restrictedList(groups: Set<string>): Set<string> {
+    if (groups.has('owner')) return new Set()
+    let result = this.restricted
+    for (const group of groups) {
+      const g = this.groups.get(group)?.forEach(group => {
+        const paths = this.names.get(group)
+        if (paths) result = result.difference(paths)
+      })
+    }
+    return result
   }
   checkMany(groups: Set<string>, path: string): boolean {
     const name = this.paths.get(path)
