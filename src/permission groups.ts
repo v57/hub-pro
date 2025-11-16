@@ -2,9 +2,9 @@ export class PermissionGroups {
   groups = new Map<string, Set<string>>()
   paths = new Map<string, string>()
   restricted = new Set<string>()
-  add(permission: { name: string; path: string }) {
-    this.restricted.add(permission.path)
-    this.paths.set(permission.path, permission.name)
+  add(name: string, path: string) {
+    this.restricted.add(path)
+    this.paths.set(path, name)
     return this
   }
   addGroup(group: string) {
@@ -18,6 +18,14 @@ export class PermissionGroups {
     const g = this.groups.get(group)
     if (!g) return this.restricted
     return g.difference(this.restricted)
+  }
+  checkMany(groups: Set<string>, path: string): boolean {
+    const name = this.paths.get(path)
+    if (!name) return true
+    for (const group of Array.from(groups)) {
+      if (this.groups.get(group)?.has(name)) return true
+    }
+    return false
   }
   check(group: string, path: string): boolean {
     const name = this.paths.get(path)
@@ -42,7 +50,7 @@ export class PermissionGroups {
         for (const [group, list] of Object.entries(data.permissions)) {
           for (const [name, paths] of Object.entries(list!)) {
             for (const path of paths!) {
-              this.add({ name: `${group}/${name}`, path })
+              this.add(`${group}/${name}`, path)
             }
           }
         }
