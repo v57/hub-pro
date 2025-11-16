@@ -2,10 +2,11 @@ export class PermissionGroups {
   groups = new Map<string, Set<string>>()
   paths = new Map<string, string>()
   restricted = new Set<string>()
-  add(name: string, path: string) {
+  add(name: string, path: string): boolean {
+    if (this.paths.has(path)) return false
     this.restricted.add(path)
     this.paths.set(path, name)
-    return this
+    return true
   }
   addGroup(group: string) {
     if (this.groups.has(group)) return
