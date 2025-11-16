@@ -34,9 +34,10 @@ export class PermissionGroups {
     return result
   }
   checkMany(groups: Set<string>, path: string): boolean {
+    if (groups.has('owner')) return true
     const name = this.paths.get(path)
     if (!name) return true
-    for (const group of Array.from(groups)) {
+    for (const group of groups) {
       if (this.groups.get(group)?.has(name)) return true
     }
     return false
