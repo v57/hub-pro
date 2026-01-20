@@ -54,6 +54,7 @@ export class Hub {
       const restricted = groups.restrictedList(state.permissions)
       return allApi.difference(restricted)
     })
+    const connectionsState = new LazyState(() => this.connectionsInfo()).delay(1)
     const statusBadges = new LazyState<StatusBadges>(() => this.statusBadges)
     const pendingAuthorizations = new LazyState<PendingAuthorization[]>(() => {
       let result: { [key: string]: string[] | undefined } = {}
@@ -125,6 +126,7 @@ export class Hub {
         if (!permissions.has('owner')) throw 'unauthorized'
         return publicKey()
       })
+      .stream('hub/connections', () => connectionsState.makeIterator())
       .post('hub/proxy', ({ body: { body, path, name } }) => {
         const proxy = this.proxies.get(name)
         if (!proxy) throw 'proxy not found'
@@ -326,6 +328,14 @@ export class Hub {
     }
     state.permissions.add('auth')
     return true
+  }
+  private connectionsInfo(): ConnectionInfo[] {
+    return Array.from(this.connections, c => ({
+      id: c.state.id,
+      services: c.state.services.size,
+      apps: c.state.apps.size,
+      permissions: c.state.permissions ? Array.from(c.state.permissions) : [],
+    }))
   }
   async reauthorizeServices() {
     this.connections.forEach(a => {
@@ -559,4 +569,10 @@ interface StatusBadges {
   services: number
   security: number
   apps: AppHeader[]
+}
+interface ConnectionInfo {
+  id?: string
+  services?: number
+  apps?: number
+  permissions: string[]
 }
