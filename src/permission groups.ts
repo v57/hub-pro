@@ -1,5 +1,5 @@
 export class PermissionGroups {
-  groups = new Map<string, Set<string>>()
+  groups: Partial<Record<string, Set<string>>> = {}
   paths = new Map<string, string>()
   names = new Map<string, Set<string>>()
   restricted = new Set<string>()
@@ -16,17 +16,17 @@ export class PermissionGroups {
     return true
   }
   addGroup(group: string) {
-    if (this.groups.has(group)) return
-    this.groups.set(group, new Set())
+    if (this.groups[group]) return
+    this.groups[group] = new Set()
   }
   allow(group: string, name: string) {
-    this.groups.get(group)?.add(name)
+    this.groups[group]?.add(name)
   }
   restrictedList(groups: Set<string>): Set<string> {
     if (groups.has('owner')) return new Set()
     let result = this.restricted
     for (const group of groups) {
-      const g = this.groups.get(group)?.forEach(group => {
+      const g = this.groups[group]?.forEach(group => {
         const paths = this.names.get(group)
         if (paths) result = result.difference(paths)
       })
@@ -38,14 +38,14 @@ export class PermissionGroups {
     const name = this.paths.get(path)
     if (!name) return true
     for (const group of groups) {
-      if (this.groups.get(group)?.has(name)) return true
+      if (this.groups[group]?.has(name)) return true
     }
     return false
   }
   check(group: string, path: string): boolean {
     const name = this.paths.get(path)
     if (!name) return true
-    return this.groups.get(group)?.has(name) ?? false
+    return this.groups[group]?.has(name) ?? false
   }
   async save() {
     let groups: GroupList = {}
@@ -53,9 +53,9 @@ export class PermissionGroups {
       permissions: this.list(),
       groups,
     }
-    this.groups.forEach((value, key) => {
-      groups[key] = Array.from(value)
-    })
+    for (const [key, value] of Object.entries(this.groups)) {
+      groups[key] = Array.from(value!)
+    }
     await Bun.file('groups.json').write(JSON.stringify(data, null, 2))
   }
   async load() {
