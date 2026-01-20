@@ -102,6 +102,13 @@ export class PermissionGroups {
     })
     return result
   }
+  groupList(): Record<string, string[]> {
+    let object: Record<string, string[]> = {}
+    for (const [key, value] of Object.entries(this.groups)) {
+      object[key] = Array.from(value!)
+    }
+    return object
+  }
 }
 
 interface SavedPermissions {

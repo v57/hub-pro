@@ -17,7 +17,7 @@ await auth.load()
 const apiPermissions = await new ApiPermissions().load()
 const groups = await new PermissionGroups().load()
 const groupsPermissionsState = new LazyState(() => groups.list()).delay(1)
-const groupsState = new LazyState(() => groups.groups).delay(1)
+const groupsState = new LazyState(() => groups.groupList()).delay(1)
 
 const paddr = (a?: string) => (a ? (isNaN(Number(a)) ? a : Number(a)) : 1997)
 
@@ -168,10 +168,12 @@ export class Hub {
 
       .stream('hub/groups/permissions', () => groupsPermissionsState.makeIterator())
       .stream('hub/groups/list', () => groupsState.makeIterator())
-      .post('hub/groups/add', ({ body: { name, permissions } }) => {
+      .post('hub/groups/add', async ({ body: { name, permissions } }) => {
         groups.addGroup(name)
-        permissions?.forEach?.((a: string) => groups.add(name, a))
+
+        permissions?.forEach?.((a: string) => groups.allow(name, a))
         groupsState.setNeedsUpdate()
+        await groups.save()
       })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
