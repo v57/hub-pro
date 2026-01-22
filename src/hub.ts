@@ -178,6 +178,11 @@ export class Hub {
         groupsState.setNeedsUpdate()
         await groups.save()
       })
+      .post('hub/groups/remove', async ({ body: name }) => {
+        groups.removeGroup(name)
+        groupsState.setNeedsUpdate()
+        await groups.save()
+      })
       .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
       .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
         if (!permissions.has('owner')) throw 'unauthorized'
