@@ -19,6 +19,9 @@ export class PermissionGroups {
     if (this.groups[group]) return
     this.groups[group] = new Set()
   }
+  removeGroup(group: string) {
+    delete this.groups[group]
+  }
   allow(group: string, name: string) {
     this.groups[group]?.add(name)
   }

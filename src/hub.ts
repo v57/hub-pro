@@ -171,6 +171,7 @@ export class Hub {
       .stream('hub/groups/permissions', () => groupsPermissionsState.makeIterator())
       .stream('hub/groups/list', () => groupsState.makeIterator())
       .post('hub/groups/add', async ({ body: { name, permissions } }) => {
+        groups.removeGroup(name)
         groups.addGroup(name)
 
         permissions?.forEach?.((a: string) => groups.allow(name, a))
