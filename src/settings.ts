@@ -17,55 +17,81 @@ class HubSettings {
     api: {},
     pendingLimit: 0,
   }
-  private isSavePending = false
+  storage: Storage
+  constructor() {
+    this.storage = new Storage(
+      'hub.json',
+      () => this.data,
+      data => {
+        this.data = data
+        this.data.merge ??= []
+        this.data.proxies ??= []
+        this.data.api ??= {}
+        this.data.pendingLimit ??= 0
+      },
+    )
+  }
   async load() {
-    try {
-      this.data = await Bun.file('hub.json').json()
-      this.data.merge ??= []
-      this.data.proxies ??= []
-      this.data.api ??= {}
-      this.data.pendingLimit ??= 0
-      console.log(this.data)
-    } catch {}
+    await this.storage.load()
     return this
   }
-  private async save() {
-    this.isSavePending = false
-    await Bun.file('hub.json').write(JSON.stringify(this.data, null, 2))
-  }
   async setNeedsSave() {
-    if (this.isSavePending) return
-    this.isSavePending = true
-    setTimeout(() => this.save(), 1000)
+    this.storage.save()
   }
   addMerge(address: string) {
     if (this.data.merge.includes(address)) return
     this.data.merge.push(address)
-    this.setNeedsSave()
+    this.storage.save()
   }
   removeMerge(address: string) {
     const i = this.data.merge.findIndex(a => a === address)
     if (i == -1) return
     this.data.merge.splice(i, 1)
-    this.setNeedsSave()
+    this.storage.save()
   }
   addProxy(address: string) {
     if (this.data.proxies.includes(address)) return
     this.data.proxies.push(address)
-    this.setNeedsSave()
+    this.storage.save()
   }
   removeProxy(address: string) {
     const i = this.data.proxies.findIndex(a => a === address)
     if (i == -1) return
     this.data.proxies.splice(i, 1)
-    this.setNeedsSave()
+    this.storage.save()
   }
   updateApi(path: string, update: (settings: ApiSettings) => boolean) {
     const settings = this.data.api[path] ?? {}
-    if (update(settings)) {
-      this.setNeedsSave()
-    }
+    if (update(settings)) this.storage.save()
   }
 }
 
 export let settings = await new HubSettings().load()
+
+export class Storage {
+  path: string
+  encode: () => any
+  decode: (data: any) => void
+  isSavePending = false
+  constructor(path: string, encode: () => any, decode: (data: any) => void) {
+    this.path = path
+    this.encode = encode
+    this.decode = decode
+  }
+  async load() {
+    try {
+      const data = await Bun.file(this.path).json()
+      this.decode(data)
+    } catch {}
+  }
+  async save() {
+    if (this.isSavePending) return
+    this.isSavePending = true
+    setTimeout(() => {
+      this.isSavePending = false
+      Bun.file(this.path)
+        .write(JSON.stringify(this.encode(), null, 2))
+        .then()
+    }, 1000)
+  }
+}
