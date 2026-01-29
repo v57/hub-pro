@@ -1,6 +1,5 @@
 import type { Hub } from './hub'
 import { sign } from './keychain'
-import { Channel } from 'channel/client'
 import { settings } from './settings'
 import { LazyState } from 'channel/more'
 const v = '0'
