@@ -12,10 +12,10 @@ export async function publicKey(): Promise<string> {
 }
 async function loadKey(): Promise<string> {
   try {
-    return await Bun.file('auth').text()
+    return await Bun.file('data/auth').text()
   } catch {
     const key = await generateKey()
-    await Bun.file('auth').write(key)
+    await Bun.file('data/auth').write(key)
     return key
   }
 }

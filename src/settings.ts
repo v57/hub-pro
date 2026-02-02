@@ -1,4 +1,8 @@
 import type { Name as LoadBalancer } from './load balancers'
+import { mkdir } from 'fs/promises'
+try {
+  await mkdir('data', { recursive: true })
+} catch {}
 
 interface Settings {
   merge: string[]
@@ -20,7 +24,7 @@ class HubSettings {
   storage: Storage
   constructor() {
     this.storage = new Storage(
-      'hub.json',
+      'data/hub.json',
       () => this.data,
       data => {
         this.data = data

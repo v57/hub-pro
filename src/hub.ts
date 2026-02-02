@@ -1,23 +1,16 @@
 import { Channel, type Sender, type BodyContext, ObjectMap } from 'channel/server'
 import 'channel/client'
 import { LazyState, LazyStates } from 'channel/more'
-import { Authorization } from './auth.ts'
-import { ApiPermissions } from './permissions.ts'
 import { HubMerger, ServiceUpdateContext } from './merge.ts'
 import { settings } from './settings.ts'
 import { publicKey } from './keychain.ts'
 import * as LoadBalancer from './load balancers.ts'
 import type { Cancellable } from 'channel/channel'
-import { PermissionGroups } from './permission groups.ts'
+import { Security } from './security.ts'
 
 export type { Sender } from 'channel/client'
 
-const auth = new Authorization()
-await auth.load()
-const apiPermissions = await new ApiPermissions().load()
-const groups = await new PermissionGroups().load()
-const groupsPermissionsState = new LazyState(() => groups.list()).delay(1)
-const groupsState = new LazyState(() => groups.groupList()).delay(1)
+export const security = await new Security().load()
 
 const paddr = (a?: string) => (a ? (isNaN(Number(a)) ? a : Number(a)) : 1997)
 
@@ -26,12 +19,6 @@ interface State {
   id?: string
   services: Set<string>
   apps: Set<string>
-  permissions: Set<string>
-}
-
-interface PendingAuthorization {
-  id: string
-  pending: string[]
 }
 
 let requests = 0
@@ -42,6 +29,11 @@ export class Hub {
   merger = new HubMerger()
   proxies = new Map<string, Sender>()
   apps = new Apps()
+  api = new Set<string>()
+  apiList = new LazyStates<State, unknown>(state => {
+    const allApi = new Set(Object.keys(this.services.storage)).union(this.api)
+    return security.allowedApi(state.key, allApi)
+  })
   constructor(address = paddr(Bun.env.HUBLISTEN)) {
     const services = this.services
     const statusState = new LazyState<StatusState>(() => ({
@@ -49,36 +41,18 @@ export class Hub {
       services: this.services.map(a => a.status),
       pro: true,
     }))
-    const apiList = new LazyStates<State, unknown>(state => {
-      const allApi = new Set(Object.keys(services.storage))
-      const restricted = groups.restrictedList(state.permissions)
-      return allApi.difference(restricted)
-    })
     const connectionsState = new LazyState(() => this.connectionsInfo()).delay(1)
     const statusBadges = new LazyState<StatusBadges>(() => this.statusBadges)
-    const pendingAuthorizations = new LazyState<PendingAuthorization[]>(() => {
-      let result: { [key: string]: string[] | undefined } = {}
-      this.services.forEach(s =>
-        s.disabled.forEach(c => {
-          if (c.state.id) {
-            let services = result[c.state.id]
-            if (services) {
-              services.push(s.name)
-            } else {
-              result[c.state.id] = [s.name]
-            }
-          }
-        }),
-      )
-      return Object.entries(result).map(([id, pending]) => ({ id, pending }) as PendingAuthorization)
-    })
     const sendUpdates = () => {
       statusState.setNeedsUpdate()
-      pendingAuthorizations.setNeedsUpdate()
       statusBadges.setNeedsUpdate()
     }
     this.channel
-      .stream('hub/api/list', ({ state }) => apiList.makeIterator(state))
+      .post('hub/api', ({ state }) => {
+        const allApi = new Set(Object.keys(services.storage)).union(this.api)
+        return security.allowedApi(state.key, allApi)
+      })
+      .stream('hub/api/list', ({ state }) => this.apiList.makeIterator(state))
       .post('hub/service/update', ({ body: { add, remove, addApps, removeApps, services, apps }, state, sender }) => {
         const context = this.merger.context()
         if (services && Array.isArray(services)) {
@@ -88,15 +62,13 @@ export class Hub {
           const remove = state.services.difference(paths)
           this.addServices(sender, state, Array.from(add), context)
           this.removeServices(sender, state, Array.from(remove), context)
-          let didAddPermissions = false
           for (const service of s) {
             const p = service.permissions
             if (p) {
               const group = p.group ?? service.path.split('/')[0]
-              if (groups.add(`${group}/${p.name}`, service.path)) didAddPermissions = true
+              security.group.names.add(service.path, `${group}/${p.name}`)
             }
           }
-          if (didAddPermissions) groupsPermissionsState.setNeedsUpdate()
         }
         if (apps && Array.isArray(apps)) {
           const paths = new Set((apps as AppHeader[]).map(a => a.path))
@@ -113,17 +85,17 @@ export class Hub {
         context.applyChanges()
         sendUpdates()
       })
-      .post('hub/merge/add', ({ body: address, state: { permissions } }) => {
-        if (!permissions.has('owner')) throw 'unauthorized'
+      .post('hub/merge/add', ({ body: address, state: { key } }) => {
+        security.requireOwner(key)
         this.merger.connect(address, this)
       })
-      .post('hub/merge/remove', ({ body: address, state: { permissions } }) => {
-        if (!permissions.has('owner')) throw 'unauthorized'
+      .post('hub/merge/remove', ({ body: address, state: { key } }) => {
+        security.requireOwner(key)
         this.merger.disconnect(address)
       })
       .stream('hub/merge/status', () => this.merger.state.makeIterator())
-      .post('hub/key', ({ state: { permissions } }) => {
-        if (!permissions.has('owner')) throw 'unauthorized'
+      .post('hub/key', ({ state: { key } }) => {
+        security.requireOwner(key)
         return publicKey()
       })
       .stream('hub/connections', () => connectionsState.makeIterator())
@@ -137,22 +109,21 @@ export class Hub {
         if (!proxy) throw 'proxy not found'
         return proxy.values(path, body)
       })
-      .post('hub/proxy/add', ({ body: address, state: { permissions } }) => {
-        if (!permissions.has('owner')) throw 'unauthorized'
+      .post('hub/proxy/add', ({ body: address, state: { key } }) => {
+        security.requireOwner(key)
         this.merger.connectProxy(address, this)
       })
-      .post('hub/proxy/remove', ({ body: address, state: { permissions } }) => {
-        if (!permissions.has('owner')) throw 'unauthorized'
+      .post('hub/proxy/remove', ({ body: address, state: { key } }) => {
+        security.requireOwner(key)
         this.merger.disconnectProxy(address)
       })
       .post('hub/proxy/join', ({ sender, state }) => {
-        console.log('Joining proxy', state.id)
-        if (!state.id) throw 'unauthorized'
-        this.proxies.set(state.id, sender)
-        return state.id
+        if (!state.key) throw 'unauthorized'
+        this.proxies.set(state.key, sender)
+        return state.key
       })
-      .post('hub/balancer/set', ({ body: { path, type }, state: { permissions } }) => {
-        if (!permissions.has('owner')) throw 'unauthorized'
+      .post('hub/balancer/set', ({ body: { path, type }, state: { key } }) => {
+        security.requireOwner(key)
         settings.updateApi(path, settings => {
           if ((settings.loadBalancer ?? 'counter') === type) return false
           settings.loadBalancer = type
@@ -160,61 +131,87 @@ export class Hub {
         })
         this.services.get(path)?.setBalancer(type)
       })
-      .post('hub/balancer/limit', ({ body: { limit }, state: { permissions } }) => {
-        if (!permissions.has('owner')) throw 'unauthorized'
+      .post('hub/balancer/limit', ({ body: { limit }, state: { key } }) => {
+        security.requireOwner(key)
         if (settings.data.pendingLimit !== limit) {
           settings.data.pendingLimit = limit
           settings.setNeedsSave()
         }
       })
-
-      .stream('hub/groups/permissions', () => groupsPermissionsState.makeIterator())
-      .stream('hub/groups/list', () => groupsState.makeIterator())
-      .post('hub/groups/add', async ({ body: { name, permissions } }) => {
-        groups.removeGroup(name)
-        groups.addGroup(name)
-
-        permissions?.forEach?.((a: string) => groups.allow(name, a))
-        groupsState.setNeedsUpdate()
-        await groups.save()
+      .post('hub/host/update', async ({ body: { key, allow, revoke }, state }) => {
+        security.requireOwner(state.key)
+        security.host.allow(key, allow)
+        security.host.revoke(key, revoke)
       })
-      .post('hub/groups/remove', async ({ body: name }) => {
-        groups.removeGroup(name)
-        groupsState.setNeedsUpdate()
-        await groups.save()
+      .stream('hub/host/pending', ({ state }) => {
+        security.requireOwner(state.key)
+        return security.host.pendingSubscription.makeIterator()
       })
-      .post('hub/permissions', ({ state }) => Array.from(state.permissions).toSorted())
-      .post('hub/permissions/add', ({ body: { services, permission }, state: { permissions } }) => {
-        if (!permissions.has('owner')) throw 'unauthorized'
-        apiPermissions.addServices(services, permission)
-        const context = this.merger.context()
-        let changes = 0
-        for (const service of services) {
-          const s = this.services.get(service)
-          if (s) changes += s.addPermission(permission, context)
+      .post('hub/host/allowed', async ({ body: key, state }) => {
+        security.requireOwner(state.key)
+        return Array.from(security.host.allowed(key))
+      })
+      .post('hub/call/update', async ({ body: { key, allow, revoke }, state }) => {
+        security.requireOwner(state.key)
+        security.call.allow(key, allow)
+        security.call.revoke(key, revoke)
+      })
+      .stream('hub/call/pending', ({ state }) => {
+        security.requireOwner(state.key)
+        return security.call.pendingSubscription.makeIterator()
+      })
+      .post('hub/call/allowed', async ({ body: key, state }) => {
+        security.requireOwner(state.key)
+        return Array.from(security.call.allowed(key))
+      })
+      .post('hub/group/create', async ({ body: name, state }) => {
+        security.requireOwner(state.key)
+        security.group.create(name)
+      })
+      .post('hub/group/rename', async ({ body: { group, name }, state }) => {
+        security.requireOwner(state.key)
+        security.group.rename(group, name)
+      })
+      .post('hub/group/remove', async ({ body: group, state }) => {
+        security.requireOwner(state.key)
+        security.group.remove(group)
+      })
+      .post('hub/group/update', async ({ body: { group, add, remove, set }, state }) => {
+        security.requireOwner(state.key)
+        if (set) {
+          security.group.replace(group, set)
+        } else {
+          security.group.update(group, add, remove)
         }
+      })
+      .post('hub/group/update/users', async ({ body: { group, add, remove }, state }) => {
+        security.requireOwner(state.key)
+        security.group.users.edit(group, add, remove)
+        const users = security.group.users.users(group)
+        let changes = 0
+        const context = this.merger.context()
+        add?.forEach((service: string) => {
+          const s = this.services.get(service)
+          if (!s) return
+          users.forEach(user => (changes += s.allowKey(user, context)))
+        })
+        remove?.forEach((service: string) => {
+          const s = this.services.get(service)
+          if (!s) return
+          users.forEach(user => (changes += s.revokeKey(user, context)))
+        })
         context.applyChanges()
         if (changes) sendUpdates()
       })
-      .post('hub/permissions/remove', ({ body: { services, permission }, state: { permissions } }) => {
-        if (!permissions.has('owner')) throw 'unauthorized'
-        apiPermissions.removeServices(services, permission)
-        let changes = 0
-        const context = this.merger.context()
-        for (const service of services) {
-          const s = this.services.get(service)
-          if (s) changes += s.removePermission(permission, context)
-        }
-        context.applyChanges()
-        if (changes) sendUpdates()
-      })
-      .stream('hub/permissions/pending', () => pendingAuthorizations.makeIterator())
+      .stream('hub/group/list', () => security.group.subscription.makeIterator())
+      .stream('hub/group/users', () => security.group.users.subscription.makeIterator())
+      .stream('hub/group/names', () => security.group.names.subscription.makeIterator())
       .stream('hub/status', () => statusState.makeIterator())
       .stream('hub/status/badges', () => statusBadges.makeIterator())
-      .postOther(other, async ({ body, path, task, state: { permissions } }) => {
+      .postOther(other, async ({ body, path, task, state: { key } }) => {
         const service = this.services.get(path)
         if (!service) throw 'api not found'
-        if (groups.checkMany(permissions, path)) throw 'permissions required'
+        if (!security.allowsCall(key, path)) throw 'permissions required'
         const s = await service.next()
         if (!s) throw 'api not found'
         if (task?.isCancelled) throw 'cancelled'
@@ -231,10 +228,10 @@ export class Hub {
           service.completed(s)
         }
       })
-      .streamOther(other, async function* ({ body, path, state: { permissions } }) {
+      .streamOther(other, async function* ({ body, path, state: { key } }) {
         const service = services.get(path)
         if (!service) throw 'api not found'
-        if (groups.checkMany(permissions, path)) throw 'permissions required'
+        if (!security.allowsCall(key, path)) throw 'permissions required'
         const s = await service.next()
         if (!s) throw 'api not found'
         service.requests += 1
@@ -251,9 +248,6 @@ export class Hub {
         }
       })
       .onDisconnect((state, sender) => {
-        if (auth.sender === sender) {
-          delete auth.sender
-        }
         const context = this.merger.context()
         state.services.forEach(s => this.services.get(s)?.remove(sender, context))
         const sendUpdates = state.apps.size > 0
@@ -262,17 +256,12 @@ export class Hub {
         context.applyChanges()
         statusState.setNeedsUpdate()
         if (sendUpdates) statusBadges.setNeedsUpdate()
-        if (sender === auth.sender) {
-          delete auth.sender
-        }
       })
       .listen(address, {
         async state(headers: Headers): Promise<State> {
-          const { id, permissions } = await auth.permissions(headers.get('auth'))
+          const key = security.keys.verify(headers.get('auth') ?? undefined)
           return {
-            key: headers.get('auth') ?? undefined,
-            id,
-            permissions,
+            key,
             services: new Set<string>(),
             apps: new Set<string>(),
           }
@@ -285,6 +274,7 @@ export class Hub {
         },
       })
 
+    this.api = new Set([...Object.keys(this.channel.postApi.storage), ...Object.keys(this.channel.streamApi.storage)])
     settings.data.merge.forEach(address => this.merger.connect(address, this))
   }
   stats() {
@@ -294,19 +284,17 @@ export class Hub {
     services.forEach(s => {
       if (state.services.has(s)) return
       state.services.add(s)
-      const isAuth = this.checkAuthorization(sender, state, s)
       let service = this.services.get(s)
       if (!service) {
         service = new Services(s)
         this.services.set(s, service)
         context.add(s)
       }
-      const enabled = isAuth || apiPermissions.allowsService(service.name, state.permissions)
+      const enabled = security.allowsHost(state.key, s)
       service.add({ sender, state, enabled, sending: new Set(), streams: 0 }, context)
       console.log('Service', s, service.services.length)
     })
     console.log('Added', services.length, 'services')
-    if (state.permissions.has('auth')) this.reauthorizeServices()
   }
   removeServices(sender: Sender, state: State, services: string[], context: ServiceUpdateContext) {
     services.forEach(s => {
@@ -317,37 +305,12 @@ export class Hub {
       service.remove(sender, context)
     })
   }
-  private checkAuthorization(sender: Sender, state: State, service: string) {
-    if (service === 'owner' || service.startsWith?.('owner/')) throw 'invalid service'
-    if (service !== 'auth' && !service.startsWith?.('auth/')) return false
-    if (!state.key) throw 'Service have to support authorization'
-    if (state.permissions.has('auth')) return true
-    const key = auth.verify(state.key)
-    if (auth.auth === key) {
-      auth.sender = sender
-    } else if (!auth.auth) {
-      auth.sender = sender
-      auth.auth = key
-      auth.save()
-    } else {
-      throw 'Hub is using a different authorization service'
-    }
-    state.permissions.add('auth')
-    return true
-  }
   private connectionsInfo(): ConnectionInfo[] {
     return Array.from(this.connections, c => ({
       id: c.state.id,
       services: c.state.services.size,
       apps: c.state.apps.size,
-      permissions: c.state.permissions ? Array.from(c.state.permissions) : [],
     }))
-  }
-  async reauthorizeServices() {
-    this.connections.forEach(a => {
-      if (a.state.permissions.has('auth')) return
-      a.sender.stop()
-    })
   }
   get statusBadges(): StatusBadges {
     let unauthorized = new Set<Sender>()
@@ -397,28 +360,26 @@ class Services {
       }
     }
   }
-  addPermission(permission: string, context: ServiceUpdateContext): number {
+  allowKey(key: string, context: ServiceUpdateContext): number {
     let enabled = new Set<Service>()
     this.disabled.forEach(s => {
-      if (s.state.permissions.has(permission)) {
-        enabled.add(s)
-        s.enabled = true
-        this.loadBalancer.add(this.services, s)
-        if (this.services.length === 1) context.add(this.name)
-      }
+      if (s.state.key !== key) return
+      enabled.add(s)
+      s.enabled = true
+      this.loadBalancer.add(this.services, s)
+      if (this.services.length === 1) context.add(this.name)
     })
     if (!enabled.size) return 0
     this.disabled = this.disabled.filter(a => !enabled.has(a))
     return enabled.size
   }
-  removePermission(permission: string, context: ServiceUpdateContext): number {
+  revokeKey(key: string, context: ServiceUpdateContext): number {
     let disabled: Service[] = []
     this.services.forEach(s => {
-      if (s.state.permissions.has(permission)) {
-        disabled.push(s)
-        s.enabled = false
-        this.disabled.push(s)
-      }
+      if (s.state.key !== key) return
+      disabled.push(s)
+      s.enabled = false
+      this.disabled.push(s)
     })
     if (!disabled.length) return 0
     for (const service of disabled) {
@@ -580,5 +541,4 @@ interface ConnectionInfo {
   id?: string
   services?: number
   apps?: number
-  permissions: string[]
 }
