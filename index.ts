@@ -1,4 +1,4 @@
-import { Hub } from './src/hub'
+import { Hub, security } from './src/hub'
 let port: number | undefined
 let merges: string[] = []
 let proxies: string[] = []
@@ -18,6 +18,10 @@ while (true) {
     case '--proxy':
       const proxy = argv.shift()
       if (proxy) proxies.push(proxy)
+      break
+    case '--owner':
+      const id = argv.shift()
+      if (id) security.addOwner(id)
       break
     default:
       break
