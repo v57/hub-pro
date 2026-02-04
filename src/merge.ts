@@ -1,14 +1,16 @@
 import type { Hub } from './hub'
 import { sign } from './keychain'
 import { settings } from './settings'
-import { LazyState } from 'channel/more'
+import { LazyState, LazyStates } from 'channel/more'
 const v = '0'
 
 export class HubMerger {
   connections = new Map<string, Connection>()
   proxies = new Map<string, Connection>()
   state: LazyState<ConnectionStatus[]>
-  constructor() {
+  hub: Hub
+  constructor(hub: Hub) {
+    this.hub = hub
     this.state = new LazyState<ConnectionStatus[]>(async () =>
       this.connections
         .values()
@@ -60,21 +62,32 @@ export class ServiceUpdateContext {
   removed: string[] = []
   merger: HubMerger
   isActive: boolean
+  hasChanges = false
   constructor(merger: HubMerger) {
     this.merger = merger
     this.isActive = merger.connections.size > 0
   }
+  get hub(): Hub {
+    return this.merger.hub
+  }
   add(service: string) {
-    if (!this.isActive) return
-    if (!allows(service)) return
+    console.log('+', service)
+    this.hasChanges = true
+    this.hub.api.add(service)
+    if (!this.isActive || !allows(service)) return
     this.added.push(service)
   }
   remove(service: string) {
+    console.log('-', service)
+    this.hasChanges = true
+    this.hub.api.delete(service)
     if (!this.isActive) return
     this.removed.push(service)
   }
   applyChanges() {
-    if (!this.added.length && !this.removed.length) return
+    if (!this.hasChanges) return
+    this.hub.apiList.setNeedsUpdate()
+    if (!this.isActive) return
     this.merger.connections.forEach(a => a.update(this.added, this.removed))
   }
 }

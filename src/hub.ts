@@ -26,13 +26,12 @@ export class Hub {
   services = new ObjectMap<string, Services>()
   channel = new Channel<State>()
   connections = new Set<BodyContext<State>>()
-  merger = new HubMerger()
+  merger = new HubMerger(this)
   proxies = new Map<string, Sender>()
   apps = new Apps()
   api = new Set<string>()
-  apiList = new LazyStates<State, unknown>(state => {
-    const allApi = new Set(Object.keys(this.services.storage)).union(this.api)
-    return security.allowedApi(state.key, allApi)
+  apiList = new LazyStates<State, string[]>(state => {
+    return security.allowedApi(state.key, this.api)
   })
   constructor(address = paddr(Bun.env.HUBLISTEN)) {
     const services = this.services
@@ -48,11 +47,8 @@ export class Hub {
       statusBadges.setNeedsUpdate()
     }
     this.channel
-      .post('hub/api', ({ state }) => {
-        const allApi = new Set(Object.keys(services.storage)).union(this.api)
-        return security.allowedApi(state.key, allApi)
-      })
-      .stream('hub/api/list', ({ state }) => this.apiList.makeIterator(state))
+      .post('hub/api', ({ state }) => security.allowedApi(state.key, this.api))
+      .stream('hub/api', ({ state }) => this.apiList.makeIterator(state))
       .post('hub/service/update', ({ body: { add, remove, addApps, removeApps, services, apps }, state, sender }) => {
         const context = this.merger.context()
         if (services && Array.isArray(services)) {
@@ -249,7 +245,7 @@ export class Hub {
       })
       .onDisconnect((state, sender) => {
         const context = this.merger.context()
-        state.services.forEach(s => this.services.get(s)?.remove(sender, context))
+        this.removeServices(sender, state, Array.from(state.services), context)
         const sendUpdates = state.apps.size > 0
         this.apps.removeSender(sender, state)
         if (state.id) this.proxies.delete(state.id)
@@ -288,13 +284,11 @@ export class Hub {
       if (!service) {
         service = new Services(s)
         this.services.set(s, service)
-        context.add(s)
       }
       const enabled = security.allowsHost(state.key, s)
       service.add({ sender, state, enabled, sending: new Set(), streams: 0 }, context)
-      console.log('Service', s, service.services.length)
     })
-    console.log('Added', services.length, 'services')
+    console.log('+', services.length, 'api')
   }
   removeServices(sender: Sender, state: State, services: string[], context: ServiceUpdateContext) {
     services.forEach(s => {
@@ -340,6 +334,7 @@ class Services {
   disabled: Service[] = []
   pending: ((service: Service | undefined) => void)[] = []
   loadBalancer: LoadBalancer.Type
+  isEnabled = false
   constructor(name: string) {
     this.name = name
     this.loadBalancer = new LoadBalancer.Counter()
@@ -348,7 +343,7 @@ class Services {
     if (service.enabled) {
       if (this.services.findIndex(a => a.sender === service.sender) === -1) {
         this.loadBalancer.add(this.services, service)
-        if (this.services.length === 1) context.add(this.name)
+        this.enableServiceIfNeeded(context)
         if (this.pending.length) {
           const service = this.loadBalancer.next(this.services)
           this.pending.shift()?.(service)
@@ -367,7 +362,7 @@ class Services {
       enabled.add(s)
       s.enabled = true
       this.loadBalancer.add(this.services, s)
-      if (this.services.length === 1) context.add(this.name)
+      this.enableServiceIfNeeded(context)
     })
     if (!enabled.size) return 0
     this.disabled = this.disabled.filter(a => !enabled.has(a))
@@ -395,8 +390,15 @@ class Services {
     const index = this.disabled.findIndex(a => a.sender === sender)
     if (index >= 0) this.disabled.splice(index, 1)
   }
+  private enableServiceIfNeeded(context: ServiceUpdateContext) {
+    // console.log('Enable if needed', this.name, this.isEnabled, this.services.length)
+    if (this.isEnabled || !this.services.length) return
+    this.isEnabled = true
+    context.add(this.name)
+  }
   private disableServiceIfNeeded(context: ServiceUpdateContext) {
-    if (this.services.length) return
+    if (!this.isEnabled || this.services.length) return
+    this.isEnabled = false
     context.remove(this.name)
     if (this.pending.length) {
       this.pending.forEach(a => a(undefined))
