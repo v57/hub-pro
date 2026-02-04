@@ -62,7 +62,7 @@ export class Hub {
             const p = service.permissions
             if (p) {
               const group = p.group ?? service.path.split('/')[0]
-              security.group.names.add(service.path, `${group}/${p.name}`)
+              security.group.names.add(service.path, `${group}: ${p.name}`)
             }
           }
         }
@@ -81,17 +81,17 @@ export class Hub {
         context.applyChanges()
         sendUpdates()
       })
-      .post('hub/merge/add', ({ body: address, state: { key } }) => {
-        security.requireOwner(key)
+      .post('hub/merge/add', ({ body: address, state, path }) => {
+        security.requireOwner(state.key, path)
         this.merger.connect(address, this)
       })
-      .post('hub/merge/remove', ({ body: address, state: { key } }) => {
-        security.requireOwner(key)
+      .post('hub/merge/remove', ({ body: address, state, path }) => {
+        security.requireOwner(state.key, path)
         this.merger.disconnect(address)
       })
       .stream('hub/merge/status', () => this.merger.state.makeIterator())
-      .post('hub/key', ({ state: { key } }) => {
-        security.requireOwner(key)
+      .post('hub/key', ({ state, path }) => {
+        security.requireOwner(state.key, path)
         return publicKey()
       })
       .stream('hub/connections', () => connectionsState.makeIterator())
@@ -105,12 +105,12 @@ export class Hub {
         if (!proxy) throw 'proxy not found'
         return proxy.values(path, body)
       })
-      .post('hub/proxy/add', ({ body: address, state: { key } }) => {
-        security.requireOwner(key)
+      .post('hub/proxy/add', ({ body: address, state, path }) => {
+        security.requireOwner(state.key, path)
         this.merger.connectProxy(address, this)
       })
-      .post('hub/proxy/remove', ({ body: address, state: { key } }) => {
-        security.requireOwner(key)
+      .post('hub/proxy/remove', ({ body: address, state, path }) => {
+        security.requireOwner(state.key, path)
         this.merger.disconnectProxy(address)
       })
       .post('hub/proxy/join', ({ sender, state }) => {
@@ -118,8 +118,8 @@ export class Hub {
         this.proxies.set(state.key, sender)
         return state.key
       })
-      .post('hub/balancer/set', ({ body: { path, type }, state: { key } }) => {
-        security.requireOwner(key)
+      .post('hub/balancer/set', ({ body: { path, type }, state, path: api }) => {
+        security.requireOwner(state.key, api)
         settings.updateApi(path, settings => {
           if ((settings.loadBalancer ?? 'counter') === type) return false
           settings.loadBalancer = type
@@ -127,61 +127,61 @@ export class Hub {
         })
         this.services.get(path)?.setBalancer(type)
       })
-      .post('hub/balancer/limit', ({ body: { limit }, state: { key } }) => {
-        security.requireOwner(key)
+      .post('hub/balancer/limit', ({ body: { limit }, state, path }) => {
+        security.requireOwner(state.key, path)
         if (settings.data.pendingLimit !== limit) {
           settings.data.pendingLimit = limit
           settings.setNeedsSave()
         }
       })
-      .post('hub/host/update', async ({ body: { key, allow, revoke }, state }) => {
-        security.requireOwner(state.key)
+      .post('hub/host/update', async ({ body: { key, allow, revoke }, state, path }) => {
+        security.requireOwner(state.key, path)
         security.host.allow(key, allow)
         security.host.revoke(key, revoke)
       })
-      .stream('hub/host/pending', ({ state }) => {
-        security.requireOwner(state.key)
+      .stream('hub/host/pending', ({ state, path }) => {
+        security.requireOwner(state.key, path)
         return security.host.pendingSubscription.makeIterator()
       })
-      .post('hub/host/allowed', async ({ body: key, state }) => {
-        security.requireOwner(state.key)
+      .post('hub/host/allowed', async ({ body: key, state, path }) => {
+        security.requireOwner(state.key, path)
         return Array.from(security.host.allowed(key))
       })
-      .post('hub/call/update', async ({ body: { key, allow, revoke }, state }) => {
-        security.requireOwner(state.key)
+      .post('hub/call/update', async ({ body: { key, allow, revoke }, state, path }) => {
+        security.requireOwner(state.key, path)
         security.call.allow(key, allow)
         security.call.revoke(key, revoke)
       })
-      .stream('hub/call/pending', ({ state }) => {
-        security.requireOwner(state.key)
+      .stream('hub/call/pending', ({ state, path }) => {
+        security.requireOwner(state.key, path)
         return security.call.pendingSubscription.makeIterator()
       })
-      .post('hub/call/allowed', async ({ body: key, state }) => {
-        security.requireOwner(state.key)
+      .post('hub/call/allowed', async ({ body: key, state, path }) => {
+        security.requireOwner(state.key, path)
         return Array.from(security.call.allowed(key))
       })
-      .post('hub/group/create', async ({ body: name, state }) => {
-        security.requireOwner(state.key)
+      .post('hub/group/create', async ({ body: name, state, path }) => {
+        security.requireOwner(state.key, path)
         security.group.create(name)
       })
-      .post('hub/group/rename', async ({ body: { group, name }, state }) => {
-        security.requireOwner(state.key)
+      .post('hub/group/rename', async ({ body: { group, name }, state, path }) => {
+        security.requireOwner(state.key, path)
         security.group.rename(group, name)
       })
-      .post('hub/group/remove', async ({ body: group, state }) => {
-        security.requireOwner(state.key)
+      .post('hub/group/remove', async ({ body: group, state, path }) => {
+        security.requireOwner(state.key, path)
         security.group.remove(group)
       })
-      .post('hub/group/update', async ({ body: { group, add, remove, set }, state }) => {
-        security.requireOwner(state.key)
+      .post('hub/group/update', async ({ body: { group, add, remove, set }, state, path }) => {
+        security.requireOwner(state.key, path)
         if (set) {
           security.group.replace(group, set)
         } else {
           security.group.update(group, add, remove)
         }
       })
-      .post('hub/group/update/users', async ({ body: { group, add, remove }, state }) => {
-        security.requireOwner(state.key)
+      .post('hub/group/update/users', async ({ body: { group, add, remove }, state, path }) => {
+        security.requireOwner(state.key, path)
         security.group.users.edit(group, add, remove)
         const users = security.group.users.users(group)
         let changes = 0

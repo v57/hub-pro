@@ -4,7 +4,7 @@ import { Storage } from './settings'
 import { LazyState } from 'channel/more'
 
 interface SecurityInterface {
-  requireOwner(user: string): void
+  requireOwner(user: string | undefined, path: string): void
   addOwner(user: string): void
   allowsCall(user: string | undefined, path: string): boolean
   allowsHost(user: string | undefined, path: string): boolean
@@ -66,26 +66,28 @@ interface SecurityInterface {
   }
 }
 
-export const ownerApi = new Set([
-  'hub/merge/add',
-  'hub/merge/remove',
-  'hub/key',
-  'hub/proxy/add',
-  'hub/proxy/remove',
-  'hub/balancer/set',
-  'hub/balancer/limit',
-  'hub/host/update',
-  'hub/host/pending',
-  'hub/host/allowed',
-  'hub/call/update',
-  'hub/call/pending',
-  'hub/call/allowed',
-  'hub/group/create',
-  'hub/group/rename',
-  'hub/group/remove',
-  'hub/group/update',
-  'hub/group/update/users',
-])
+const hubApi = {
+  'hub/merge/add': 'Hub: Merge Hubs',
+  'hub/merge/remove': 'Hub: Merge Hubs',
+  'hub/key': 'Hub: Merge Hubs',
+  'hub/proxy/add': 'Hub: Add Proxy Hubs',
+  'hub/proxy/remove': 'Hub: Add Proxy Hubs',
+  'hub/balancer/set': 'Hub: Manage Load Balancer',
+  'hub/balancer/limit': 'Hub: Manage Load Balancer',
+  'hub/host/update': 'Hub: Manage Permissions',
+  'hub/host/pending': 'Hub: Manage Permissions',
+  'hub/host/allowed': 'Hub: Manage Permissions',
+  'hub/call/update': 'Hub: Manage Permissions',
+  'hub/call/pending': 'Hub: Manage Permissions',
+  'hub/call/allowed': 'Hub: Manage Permissions',
+  'hub/group/create': 'Hub: Manage Permissions',
+  'hub/group/rename': 'Hub: Manage Permissions',
+  'hub/group/remove': 'Hub: Manage Permissions',
+  'hub/group/update': 'Hub: Manage Permissions',
+  'hub/group/update/users': 'Hub: Manage Permissions',
+}
+
+export const ownerApi = new Set(Object.keys(hubApi))
 
 export class Security implements SecurityInterface {
   keys = new Keys()
@@ -104,9 +106,8 @@ export class Security implements SecurityInterface {
     ])
     return this
   }
-  requireOwner(user: string | undefined): void {
-    if (!user) throw 'Permissions required'
-    if (this.owners.has(user)) throw 'Permissions required'
+  requireOwner(user: string | undefined, path: string): void {
+    if (!this.allowsCall(user, path)) throw 'Permissions required'
   }
   addOwner(user: string): void {
     this.owners.add(user)
@@ -256,7 +257,7 @@ class Group {
     return this.allows(group, path)
   }
   restricted(user: string | undefined): Set<string> {
-    let restricted = this.names.restricted.union(ownerApi)
+    let restricted = this.names.restricted
     if (!user) return restricted
     const group = this.users.group(user)
     if (!group) return restricted
@@ -350,7 +351,7 @@ class GroupUsers {
 }
 
 class GroupNames {
-  private names = new ObjectMap<string, string>()
+  names = new ObjectMap<string, string>()
   private paths = new MapSet<string>()
   restricted = new Set<string>()
   storage = new Storage(
@@ -360,6 +361,7 @@ class GroupNames {
       this.names.storage = data
       this.paths = new MapSet<string>()
       this.restricted = new Set()
+      this.setHubApi()
       Object.entries(data).forEach(([path, name]) => {
         this.restricted.add(path)
         this.paths.set(name as string, path)
@@ -367,6 +369,16 @@ class GroupNames {
     },
   )
   subscription = new LazyState<any>(() => this.names.storage)
+  constructor() {
+    this.setHubApi()
+  }
+  private setHubApi() {
+    Object.entries(hubApi).forEach(([path, name]) => {
+      this.names.storage[path] = name
+      this.restricted.add(path)
+      this.paths.set(name, path)
+    })
+  }
   add(path: string, name: string): void {
     const oldName = this.names.get(path)
     if (oldName) this.paths.delete(oldName, path)
