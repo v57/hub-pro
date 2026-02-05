@@ -170,11 +170,13 @@ class Host {
   }
   ask(user: string, path: string): void {
     this.pendingList.set(user, path)
+    this.pendingSubscription.setNeedsUpdate()
   }
   allow(user: string, paths: string[] | undefined): void {
     if (!paths?.length) return
     for (const path of paths) {
       this.pendingList.delete(user, path)
+      this.pendingSubscription.setNeedsUpdate()
       this.allowedList.set(user, path)
     }
     this.storage.save()
@@ -183,6 +185,7 @@ class Host {
     if (!paths?.length) return
     for (const path of paths) {
       this.pendingList.set(user, path)
+      this.pendingSubscription.setNeedsUpdate()
       this.allowedList.delete(user, path)
     }
     this.storage.save()
@@ -214,11 +217,13 @@ class Call {
   }
   ask(user: string, path: string): void {
     this.pendingList.set(user, path)
+    this.pendingSubscription.setNeedsUpdate()
   }
   allow(user: string, paths: string[] | undefined): void {
     if (!paths?.length) return
     for (const path of paths) {
       this.pendingList.delete(user, path)
+      this.pendingSubscription.setNeedsUpdate()
       this.allowedList.set(user, path)
     }
     this.storage.save()
@@ -227,6 +232,7 @@ class Call {
     if (!paths?.length) return
     for (const path of paths) {
       this.pendingList.set(user, path)
+      this.pendingSubscription.setNeedsUpdate()
       this.allowedList.delete(user, path)
     }
     this.storage.save()
@@ -248,7 +254,10 @@ class Group {
     () => this.groups.encode(),
     data => this.groups.decode(data),
   )
-  subscription = new LazyState<any>(() => this.groups.encode())
+  subscription = new LazyState<any>(() => {
+    console.log('groups/list', this.groups.encode())
+    return this.groups.encode()
+  })
   allowsUser(user: string | undefined, path: string): boolean {
     if (!this.names.contains(path)) return true
     if (!user) return false
@@ -269,15 +278,22 @@ class Group {
   }
   create(group: string): void {
     const paths = this.groups.get(group)
-    if (!paths) this.groups.replace(group, new Set())
+    if (!paths) {
+      this.groups.replace(group, new Set())
+      this.subscription.setNeedsUpdate()
+    }
   }
   remove(group: string): void {
-    if (this.groups.deleteAll(group)) this.storage.save()
+    if (this.groups.deleteAll(group)) {
+      this.subscription.setNeedsUpdate()
+      this.storage.save()
+    }
   }
   rename(group: string, name: string): void {
     this.users.rename(group, name)
     const paths = this.groups.move(group, name)
     if (!paths) return
+    this.subscription.setNeedsUpdate()
     this.storage.save()
   }
   update(group: string, add: string[], remove: string[]): void {
@@ -285,10 +301,12 @@ class Group {
     if (!paths) return
     add.forEach(path => paths.add(path))
     remove.forEach(path => paths.delete(path))
+    this.subscription.setNeedsUpdate()
     this.storage.save()
   }
   replace(group: string, paths: string[]): void {
     this.groups.replace(group, new Set(paths))
+    this.subscription.setNeedsUpdate()
     this.storage.save()
   }
   allowed(group: string): Set<string> {
@@ -326,6 +344,7 @@ class GroupUsers {
     if (oldValue) this.groupUsers.delete(oldValue, user)
     this.groupUsers.set(group, user)
     this.userGroups.set(user, group)
+    this.subscription.setNeedsUpdate()
     this.storage.save()
   }
   remove(user: string): void {
@@ -333,6 +352,7 @@ class GroupUsers {
     if (!group) return
     this.userGroups.delete(user)
     this.groupUsers.delete(group, user)
+    this.subscription.setNeedsUpdate()
     this.storage.save()
   }
   removeGroup(group: string) {
@@ -340,12 +360,14 @@ class GroupUsers {
     if (!set.size) return
     set.forEach(user => this.userGroups.delete(user))
     this.groupUsers.deleteAll(group)
+    this.subscription.setNeedsUpdate()
     this.storage.save()
   }
   rename(oldValue: string, group: string): void {
     const users = this.groupUsers.move(oldValue, group)
     if (!users) return
     users.forEach(user => this.userGroups.set(user, group))
+    this.subscription.setNeedsUpdate()
     this.storage.save()
   }
 }
@@ -385,6 +407,7 @@ class GroupNames {
     this.names.set(path, name)
     this.paths.set(name, path)
     this.restricted.add(path)
+    this.subscription.setNeedsUpdate()
     this.storage.save()
   }
   remove(path: string): void {
@@ -393,6 +416,7 @@ class GroupNames {
     this.paths.delete(name, path)
     this.names.delete(path)
     this.restricted.delete(path)
+    this.subscription.setNeedsUpdate()
     this.storage.save()
   }
   contains(path: string): boolean {
