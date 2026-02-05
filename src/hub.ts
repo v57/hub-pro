@@ -7,6 +7,7 @@ import { publicKey } from './keychain.ts'
 import * as LoadBalancer from './load balancers.ts'
 import type { Cancellable } from 'channel/channel'
 import { Security } from './security.ts'
+import { randomUUIDv7 } from 'bun'
 
 export type { Sender } from 'channel/client'
 
@@ -15,8 +16,8 @@ export const security = await new Security().load()
 const paddr = (a?: string) => (a ? (isNaN(Number(a)) ? a : Number(a)) : 1997)
 
 interface State {
+  id: string
   key?: string
-  id?: string
   services: Set<string>
   apps: Set<string>
 }
@@ -257,6 +258,7 @@ export class Hub {
         async state(headers: Headers): Promise<State> {
           const key = security.keys.verify(headers.get('auth') ?? undefined)
           return {
+            id: randomUUIDv7(),
             key,
             services: new Set<string>(),
             apps: new Set<string>(),
@@ -302,6 +304,7 @@ export class Hub {
   private connectionsInfo(): ConnectionInfo[] {
     return Array.from(this.connections, c => ({
       id: c.state.id,
+      key: c.state.key,
       services: c.state.services.size,
       apps: c.state.apps.size,
     }))
