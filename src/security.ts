@@ -457,6 +457,6 @@ class MapSet<Value> {
     Object.entries(value).forEach(([key, value]) => this.content.set(key, new Set(value as Value[])))
   }
   forEach(action: (key: string, value: Set<Value>) => void) {
-    Object.entries(this.content).forEach(([key, value]) => action(key, value))
+    Object.entries(this.content.storage).forEach(([key, value]) => action(key, value as Set<Value>))
   }
 }
