@@ -312,12 +312,10 @@ export class Hub {
     }))
   }
   get statusBadges(): StatusBadges {
-    let unauthorized = new Set<Sender>()
-    this.services.forEach(s => s.disabled.forEach(a => unauthorized.add(a.sender)))
     return {
       connections: this.connections.size,
       services: this.services.size,
-      security: unauthorized.size,
+      security: security.host.pendingList.size,
       apps: this.apps.headers,
     }
   }
