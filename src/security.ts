@@ -124,6 +124,7 @@ export class Security implements SecurityInterface {
     if (path.startsWith('hub/')) return false
     if (this.owners.has(user)) return true
     if (this.host.allows(user, path)) return true
+    this.host.ask(user, path)
     return false
   }
   allowedApi(user: string | undefined, api: Set<string>): string[] {
