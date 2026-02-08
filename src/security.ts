@@ -430,23 +430,33 @@ class GroupNames {
 
 class MapSet<Value> {
   content = new ObjectMap<string, Set<Value>>()
+  size = 0
   set(key: string, value: Value) {
     const set = this.content.get(key)
     if (set) {
-      set.add(value)
+      if (!set.has(value)) {
+        set.add(value)
+        this.size += 1
+      }
     } else {
       this.content.set(key, new Set([value]))
+      this.size += 1
     }
   }
   keys(): string[] {
     return Object.keys(this.content.storage)
   }
   replace(key: string, value: Set<Value>) {
+    const oldValue = this.content.get(key)
+    if (oldValue) this.size -= oldValue.size
     this.content.set(key, value)
+    this.size += value.size
   }
   move(from: string, to: string): Set<Value> | undefined {
     const set = this.content.get(from)
     if (!set) return
+    const oldTarget = this.content.get(to)
+    if (oldTarget) this.size -= oldTarget.size
     this.content.delete(from)
     this.content.set(to, set)
     return set
@@ -463,11 +473,13 @@ class MapSet<Value> {
     const set = this.content.get(key)
     if (!set?.delete(value)) return false
     if (set.size === 0) this.content.delete(key)
+    this.size -= 1
     return true
   }
   deleteAll(key: string): boolean {
     const set = this.content.get(key)
     if (!set) return false
+    this.size -= set.size
     this.content.delete(key)
     return true
   }
@@ -478,8 +490,11 @@ class MapSet<Value> {
   }
   decode(value: any | undefined) {
     this.content = new ObjectMap()
+    this.size = 0
     if (!value) return
-    Object.entries(value).forEach(([key, value]) => this.content.set(key, new Set(value as Value[])))
+    Object.entries(value).forEach(([key, value]) => {
+      this.replace(key, new Set(value as Value[]))
+    })
   }
   forEach(action: (key: string, value: Set<Value>) => void) {
     Object.entries(this.content.storage).forEach(([key, value]) => action(key, value as Set<Value>))
