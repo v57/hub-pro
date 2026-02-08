@@ -266,9 +266,11 @@ export class Hub {
         },
         onConnect: (connection: BodyContext<State>) => {
           this.connections.add(connection)
+          statusBadges.setNeedsUpdate()
         },
         onDisconnect: (connection: BodyContext<State>) => {
           this.connections.delete(connection)
+          statusBadges.setNeedsUpdate()
         },
       })
 
@@ -313,6 +315,7 @@ export class Hub {
     let unauthorized = new Set<Sender>()
     this.services.forEach(s => s.disabled.forEach(a => unauthorized.add(a.sender)))
     return {
+      connections: this.connections.size,
       services: this.services.size,
       security: unauthorized.size,
       apps: this.apps.headers,
@@ -540,6 +543,7 @@ interface ServicesStatus {
 interface StatusBadges {
   services: number
   security: number
+  connections: number
   apps: AppHeader[]
 }
 interface ConnectionInfo {
