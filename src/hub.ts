@@ -18,6 +18,8 @@ const paddr = (a?: string) => (a ? (isNaN(Number(a)) ? a : Number(a)) : 1997)
 interface State {
   id: string
   key?: string
+  name?: string
+  icon?: string
   services: Set<string>
   apps: Set<string>
 }
@@ -49,6 +51,10 @@ export class Hub {
     }
     this.channel
       .post('hub/api', ({ state }) => security.allowedApi(state.key, this.api))
+      .post('hub/profile/update', ({ body: { name, icon }, state }) => {
+        if (icon) state.icon = icon
+        if (name) state.name = name
+      })
       .stream('hub/api', ({ state }) => this.apiList.makeIterator(state))
       .post('hub/service/update', ({ body: { add, remove, addApps, removeApps, services, apps }, state, sender }) => {
         const context = this.merger.context()
@@ -307,6 +313,8 @@ export class Hub {
     return Array.from(this.connections, c => ({
       id: c.state.id,
       key: c.state.key,
+      name: c.state.name,
+      icon: c.state.icon,
       services: c.state.services.size,
       apps: c.state.apps.size,
     }))
