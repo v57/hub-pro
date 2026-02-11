@@ -27,6 +27,9 @@ while (true) {
       break
   }
 }
+const owner = Bun.env['HUBOWNER']
+if (owner?.length) security.addOwner(owner)
+
 const hub = new Hub(port)
 merges.forEach(address => {
   hub.merger.connect(address, hub, false)
