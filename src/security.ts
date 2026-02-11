@@ -177,18 +177,18 @@ class Host {
     if (!paths?.length) return
     for (const path of paths) {
       this.pendingList.delete(user, path)
-      this.pendingSubscription.setNeedsUpdate()
       this.allowedList.set(user, path)
     }
+    this.pendingSubscription.setNeedsUpdate()
     this.storage.save()
   }
   revoke(user: string, paths: string[] | undefined): void {
     if (!paths?.length) return
     for (const path of paths) {
       this.pendingList.set(user, path)
-      this.pendingSubscription.setNeedsUpdate()
       this.allowedList.delete(user, path)
     }
+    this.pendingSubscription.setNeedsUpdate()
     this.storage.save()
   }
   allowed(user: string): Set<string> {

@@ -145,6 +145,10 @@ export class Hub {
         security.requireOwner(state.key, path)
         security.host.allow(key, allow)
         security.host.revoke(key, revoke)
+        const context = this.merger.context()
+        allow?.forEach?.((path: string) => this.services.get(path)?.allowKey(key, context))
+        revoke?.forEach?.((path: string) => this.services.get(path)?.revokeKey(key, context))
+        context.applyChanges()
       })
       .stream('hub/host/pending', ({ state, path }) => {
         security.requireOwner(state.key, path)
