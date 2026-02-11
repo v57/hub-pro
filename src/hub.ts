@@ -19,7 +19,7 @@ interface State {
   id: string
   key?: string
   name?: string
-  icon?: string
+  icon?: any
   services: Set<string>
   apps: Set<string>
 }
