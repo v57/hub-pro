@@ -421,7 +421,7 @@ class GroupNames {
     this.storage.save()
   }
   contains(path: string): boolean {
-    return this.paths.get(path) ? true : false
+    return this.paths.get(path).size ? true : false
   }
   list(): { path: string; name: string }[] {
     return Object.entries(this.names.storage).map(([path, name]) => ({ path, name: name as string }))
