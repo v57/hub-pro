@@ -213,6 +213,25 @@ export class Hub {
       .stream('hub/group/list', () => security.group.subscription.makeIterator())
       .stream('hub/group/users', () => security.group.users.subscription.makeIterator())
       .stream('hub/group/names', () => security.group.names.subscription.makeIterator())
+      .post('hub/whitelist', async ({ body: { enabled, add, remove, allowsCurrent }, state, path }) => {
+        security.requireOwner(state.key, path)
+        if (enabled === true || enabled === false) security.whitelist.enabled = enabled
+        add?.forEach?.((user: string) => security.whitelist.add(user))
+        remove?.forEach?.((user: string) => security.whitelist.add(user))
+        if (allowsCurrent) {
+          this.connections.forEach(c => {
+            if (c.state.key) security.whitelist.add(c.state.key)
+          })
+        }
+        if (security.whitelist.enabled) {
+          this.connections.forEach(c => {
+            if (!c.state.key || !security.whitelist.users.has(c.state.key)) {
+              c.sender.stop()
+            }
+          })
+        }
+      })
+      .stream('hub/whitelist', () => security.whitelist.subscription.makeIterator())
       .stream('hub/status', () => statusState.makeIterator())
       .stream('hub/status/badges', () => statusBadges.makeIterator())
       .postOther(other, async ({ body, path, task, state: { key } }) => {
@@ -266,7 +285,7 @@ export class Hub {
       })
       .listen(address, {
         async state(headers: Headers): Promise<State> {
-          const key = security.keys.verify(headers.get('auth') ?? undefined)
+          const key = security.keys.verify(headers.get('auth') ?? undefined, security.whitelist)
           return {
             id: randomUUIDv7(),
             key,

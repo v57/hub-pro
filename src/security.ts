@@ -11,7 +11,7 @@ interface SecurityInterface {
 
   // Keys
   keys: {
-    verify(signedKey: string | undefined): string | undefined
+    verify(signedKey: string | undefined, whitelist: Whitelist): string | undefined
   }
 
   // Create api
@@ -64,6 +64,11 @@ interface SecurityInterface {
       list(): { path: string; name: string }[]
     }
   }
+  whitelist: {
+    enabled: boolean
+    add(user: string): void
+    remove(user: string): void
+  }
 }
 
 const hubApi = {
@@ -74,6 +79,7 @@ const hubApi = {
   'hub/proxy/remove': 'Hub: Add Proxy Hubs',
   'hub/balancer/set': 'Hub: Manage Load Balancer',
   'hub/balancer/limit': 'Hub: Manage Load Balancer',
+  'hub/whitelist': 'Hub: Whitelist mode',
   'hub/host/update': 'Hub: Manage Permissions',
   'hub/host/pending': 'Hub: Manage Permissions',
   'hub/host/allowed': 'Hub: Manage Permissions',
@@ -95,6 +101,7 @@ export class Security implements SecurityInterface {
   call = new Call()
   group = new Group()
   owners = new Set<string>()
+  whitelist = new Whitelist()
 
   async load() {
     await Promise.all([
@@ -103,6 +110,7 @@ export class Security implements SecurityInterface {
       this.group.storage.load(),
       this.group.names.storage.load(),
       this.group.users.storage.load(),
+      this.whitelist.storage.load(),
     ])
     return this
   }
@@ -134,11 +142,15 @@ export class Security implements SecurityInterface {
 }
 
 class Keys {
-  verify(signedKey: string | undefined): string | undefined {
-    if (!signedKey?.length) return
+  verify(signedKey: string | undefined, whitelist: Whitelist): string | undefined {
+    if (!signedKey?.length) {
+      if (whitelist.enabled) throw 'hub is not available'
+      else return
+    }
     const parts = signedKey.split('.')
     if (parts.length !== 4 && parts[0] !== 'key' && parts.length === 4) throw 'invalid key'
     const [_, key, hash, time] = parts
+    if (whitelist.enabled && !whitelist.users.has(key)) throw 'hub is not available'
     if (!this.verifyPub(key, hash, time)) throw 'invalid signature'
     return key
   }
@@ -425,6 +437,38 @@ class GroupNames {
   }
   list(): { path: string; name: string }[] {
     return Object.entries(this.names.storage).map(([path, name]) => ({ path, name: name as string }))
+  }
+}
+
+class Whitelist {
+  enabled: boolean = false
+  users = new Set<string>()
+  storage = new Storage(
+    'data/whitelist.json',
+    () => ({
+      enabled: this.enabled,
+      whitelist: Array.from(this.users),
+    }),
+    data => {
+      this.enabled = data.enabled ? true : false
+      this.users = new Set(data.whitelist)
+    },
+  )
+  subscription = new LazyState<{ enabled: boolean; users: string[] }>(() => ({
+    enabled: this.enabled,
+    users: Array.from(this.users),
+  }))
+  add(user: string): void {
+    if (this.users.has(user)) return
+    this.users.add(user)
+    this.subscription.setNeedsUpdate()
+    this.storage.save()
+  }
+  remove(user: string): void {
+    if (!this.users.has(user)) return
+    this.users.delete(user)
+    this.subscription.setNeedsUpdate()
+    this.storage.save()
   }
 }
 
