@@ -8,7 +8,7 @@
         "channel": "v57/channel",
       },
       "devDependencies": {
-        "@types/bun": "^1.3.2",
+        "@types/bun": "^1.3.9",
       },
       "peerDependencies": {
         "typescript": "^5.8.3",
@@ -22,7 +22,7 @@
 
     "bun-types": ["bun-types@1.3.9", "", { "dependencies": { "@types/node": "*" } }, "sha512-+UBWWOakIP4Tswh0Bt0QD0alpTY8cb5hvgiYeWCMet9YukHbzuruIEeXC2D7nMJPB12kbh8C7XJykSexEqGKJg=="],
 
-    "channel": ["channel@github:v57/channel#be1fdd8", { "peerDependencies": { "typescript": "^5.0.0" } }, "v57-channel-be1fdd8"],
+    "channel": ["channel@github:v57/channel#0a62a9e", { "peerDependencies": { "typescript": "^5.0.0" } }, "v57-channel-0a62a9e"],
 
     "typescript": ["typescript@5.8.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-p1diW6TqL9L07nNxvRMM7hMMw4c5XOo/1ibL4aAIGmSAt9slTE1Xgw5KWuof2uTOvCg9BY7ZRi+GaF+7sfgPeQ=="],
 
