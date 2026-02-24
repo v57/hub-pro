@@ -284,8 +284,8 @@ export class Hub {
         if (sendUpdates) statusBadges.setNeedsUpdate()
       })
       .listen(address, {
-        async state(headers: Headers): Promise<State> {
-          const key = security.keys.verify(headers.get('auth') ?? undefined, security.whitelist)
+        async state(headers: Record<string, string | undefined>): Promise<State> {
+          const key = security.keys.verify(headers['auth'] ?? undefined, security.whitelist)
           return {
             id: randomUUIDv7(),
             key,
