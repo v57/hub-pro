@@ -477,7 +477,7 @@ class Whitelist {
   }
   setEnabled(enabled: boolean | undefined) {
     if (enabled !== true && enabled !== false) return
-    if (this.enabled !== enabled) return
+    if (this.enabled === enabled) return
     this.enabled = enabled
     this.subscription.setNeedsUpdate()
     this.storage.save()
