@@ -68,6 +68,8 @@ interface SecurityInterface {
     enabled: boolean
     add(user: string): void
     remove(user: string): void
+    allows(user: string): boolean
+    setEnabled(enabled: boolean | undefined): void
   }
 }
 
@@ -150,7 +152,7 @@ class Keys {
     const parts = signedKey.split('.')
     if (parts.length !== 4 && parts[0] !== 'key' && parts.length === 4) throw 'invalid key'
     const [_, key, hash, time] = parts
-    if (whitelist.enabled && !whitelist.users.has(key)) throw 'hub is not available'
+    if (whitelist.enabled && !whitelist.allows(key)) throw 'hub is not available'
     if (!this.verifyPub(key, hash, time)) throw 'invalid signature'
     return key
   }
@@ -442,7 +444,7 @@ class GroupNames {
 
 class Whitelist {
   enabled: boolean = false
-  users = new Set<string>()
+  private users = new Set<string>()
   storage = new Storage(
     'data/whitelist.json',
     () => ({
@@ -467,6 +469,16 @@ class Whitelist {
   remove(user: string): void {
     if (!this.users.has(user)) return
     this.users.delete(user)
+    this.subscription.setNeedsUpdate()
+    this.storage.save()
+  }
+  allows(user: string): boolean {
+    return this.users.has(user)
+  }
+  setEnabled(enabled: boolean | undefined) {
+    if (enabled !== true && enabled !== false) return
+    if (this.enabled !== enabled) return
+    this.enabled = enabled
     this.subscription.setNeedsUpdate()
     this.storage.save()
   }

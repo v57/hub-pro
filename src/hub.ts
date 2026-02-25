@@ -215,7 +215,7 @@ export class Hub {
       .stream('hub/group/names', () => security.group.names.subscription.makeIterator())
       .post('hub/whitelist', async ({ body: { enabled, add, remove, allowsCurrent }, state, path }) => {
         security.requireOwner(state.key, path)
-        if (enabled === true || enabled === false) security.whitelist.enabled = enabled
+        security.whitelist.setEnabled(enabled)
         add?.forEach?.((user: string) => security.whitelist.add(user))
         remove?.forEach?.((user: string) => security.whitelist.remove(user))
         if (allowsCurrent) {
@@ -225,7 +225,7 @@ export class Hub {
         }
         if (security.whitelist.enabled) {
           this.connections.forEach(c => {
-            if (!c.state.key || !security.whitelist.users.has(c.state.key)) {
+            if (!c.state.key || !security.whitelist.allows(c.state.key)) {
               c.sender.stop()
             }
           })
