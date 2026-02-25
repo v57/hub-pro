@@ -217,7 +217,7 @@ export class Hub {
         security.requireOwner(state.key, path)
         if (enabled === true || enabled === false) security.whitelist.enabled = enabled
         add?.forEach?.((user: string) => security.whitelist.add(user))
-        remove?.forEach?.((user: string) => security.whitelist.add(user))
+        remove?.forEach?.((user: string) => security.whitelist.remove(user))
         if (allowsCurrent) {
           this.connections.forEach(c => {
             if (c.state.key) security.whitelist.add(c.state.key)
