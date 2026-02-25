@@ -231,7 +231,7 @@ export class Hub {
           })
         }
       })
-      .stream('hub/whitelist', () => security.whitelist.subscription.makeIterator())
+      .stream('hub/whitelist/status', () => security.whitelist.subscription.makeIterator())
       .stream('hub/status', () => statusState.makeIterator())
       .stream('hub/status/badges', () => statusBadges.makeIterator())
       .postOther(other, async ({ body, path, task, state: { key } }) => {
