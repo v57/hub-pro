@@ -141,6 +141,10 @@ export class Security implements SecurityInterface {
     if (user && this.owners.has(user)) return Array.from(api)
     return Array.from(api.difference(this.group.restricted(user)))
   }
+  userGroup(user: string | undefined): string | undefined {
+    if (!user) return
+    return this.group.users.group(user)
+  }
 }
 
 class Keys {

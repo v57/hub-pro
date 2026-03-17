@@ -178,6 +178,7 @@ export class Hub {
       .post('hub/group/rename', async ({ body: { group, name }, state, path }) => {
         security.requireOwner(state.key, path)
         security.group.rename(group, name)
+        connectionsState.setNeedsUpdate()
       })
       .post('hub/group/remove', async ({ body: group, state, path }) => {
         security.requireOwner(state.key, path)
@@ -208,7 +209,10 @@ export class Hub {
           users.forEach(user => (changes += s.revokeKey(user, context)))
         })
         context.applyChanges()
-        if (changes) sendUpdates()
+        if (changes) {
+          connectionsState.setNeedsUpdate()
+          sendUpdates()
+        }
       })
       .stream('hub/group/list', () => security.group.subscription.makeIterator())
       .stream('hub/group/users', () => security.group.users.subscription.makeIterator())
@@ -295,10 +299,12 @@ export class Hub {
         },
         onConnect: (connection: BodyContext<State>) => {
           this.connections.add(connection)
+          connectionsState.setNeedsUpdate()
           statusBadges.setNeedsUpdate()
         },
         onDisconnect: (connection: BodyContext<State>) => {
           this.connections.delete(connection)
+          connectionsState.setNeedsUpdate()
           statusBadges.setNeedsUpdate()
         },
       })
@@ -333,14 +339,19 @@ export class Hub {
     })
   }
   private connectionsInfo(): ConnectionInfo[] {
-    return Array.from(this.connections, c => ({
-      id: c.state.id,
-      key: c.state.key,
-      name: c.state.name,
-      icon: c.state.icon,
-      services: c.state.services.size,
-      apps: c.state.apps.size,
-    }))
+    return Array.from(
+      this.connections,
+      c =>
+        ({
+          id: c.state.id,
+          key: c.state.key,
+          name: c.state.name,
+          icon: c.state.icon,
+          services: c.state.services.size,
+          apps: c.state.apps.size,
+          group: security.userGroup(c.state.key),
+        }) as ConnectionInfo,
+    )
   }
   get statusBadges(): StatusBadges {
     return {
@@ -577,6 +588,10 @@ interface StatusBadges {
 }
 interface ConnectionInfo {
   id?: string
+  key?: string
   services?: number
   apps?: number
+  group?: string
+  name?: string
+  icon?: any
 }
