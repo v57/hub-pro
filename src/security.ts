@@ -52,7 +52,7 @@ interface SecurityInterface {
       group(user: string): string | undefined
       users(group: string): Set<string>
       add(user: string, group: string): void
-      remove(user: string): void
+      remove(user: string, group: string): void
       rename(oldValue: string, group: string): void
     }
 
@@ -274,7 +274,6 @@ class Group {
     data => this.groups.decode(data),
   )
   subscription = new LazyState<any>(() => {
-    console.log('groups/list', this.groups.encode())
     return this.groups.encode()
   })
   allowsUser(user: string | undefined, path: string): boolean {
@@ -355,7 +354,7 @@ class GroupUsers {
   }
   edit(group: string, add: string[] | undefined, remove: string[] | undefined) {
     add?.forEach(user => this.add(user, group))
-    remove?.forEach(user => this.add(user, group))
+    remove?.forEach(user => this.remove(user, group))
   }
   add(user: string, group: string): void {
     const oldValue = this.userGroups.get(user)
@@ -366,9 +365,7 @@ class GroupUsers {
     this.subscription.setNeedsUpdate()
     this.storage.save()
   }
-  remove(user: string): void {
-    const group = this.userGroups.get(user)
-    if (!group) return
+  remove(user: string, group: string): void {
     this.userGroups.delete(user)
     this.groupUsers.delete(group, user)
     this.subscription.setNeedsUpdate()

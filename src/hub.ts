@@ -209,8 +209,8 @@ export class Hub {
           users.forEach(user => (changes += s.revokeKey(user, context)))
         })
         context.applyChanges()
+        connectionsState.setNeedsUpdate()
         if (changes) {
-          connectionsState.setNeedsUpdate()
           sendUpdates()
         }
       })
