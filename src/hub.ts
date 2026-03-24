@@ -24,6 +24,11 @@ interface State {
   apps: Set<string>
 }
 
+interface ServiceProvider {
+  id: string
+  name?: string
+}
+
 let requests = 0
 export class Hub {
   services = new ObjectMap<string, Services>()
@@ -35,6 +40,14 @@ export class Hub {
   api = new Set<string>()
   apiList = new LazyStates<State, string[]>(state => {
     return security.allowedApi(state.key, this.api)
+  })
+  serviceProviders = new LazyStates<string, ServiceProvider[]>((key: string) => {
+    const index = key.indexOf('\u0000')
+    if (index > 0) {
+      return this.servicesFor(key.slice(index + 1), key.slice(0, index))
+    } else {
+      return this.servicesFor(key)
+    }
   })
   constructor(address = paddr(Bun.env.HUBLISTEN)) {
     const services = this.services
@@ -48,6 +61,7 @@ export class Hub {
     const sendUpdates = () => {
       statusState.setNeedsUpdate()
       statusBadges.setNeedsUpdate()
+      this.serviceProviders.setNeedsUpdate()
     }
     this.channel
       .post('hub/api', ({ state }) => security.allowedApi(state.key, this.api))
@@ -56,6 +70,9 @@ export class Hub {
         if (name) state.name = name
       })
       .stream('hub/api', ({ state }) => this.apiList.makeIterator(state))
+      .stream('hub/api/services', ({ body, state: { key } }) => {
+        return this.serviceProviders.makeIterator(`${key ?? ''}\u0000${body}`)
+      })
       .post('hub/service/update', ({ body: { add, remove, addApps, removeApps, services, apps }, state, sender }) => {
         const context = this.merger.context()
         if (services && Array.isArray(services)) {
@@ -149,6 +166,7 @@ export class Hub {
         allow?.forEach?.((path: string) => this.services.get(path)?.allowKey(key, context))
         revoke?.forEach?.((path: string) => this.services.get(path)?.revokeKey(key, context))
         context.applyChanges()
+        sendUpdates()
       })
       .stream('hub/host/pending', ({ state, path }) => {
         security.requireOwner(state.key, path)
@@ -285,6 +303,7 @@ export class Hub {
         if (state.id) this.proxies.delete(state.id)
         context.applyChanges()
         statusState.setNeedsUpdate()
+        this.serviceProviders.setNeedsUpdate()
         if (sendUpdates) statusBadges.setNeedsUpdate()
       })
       .listen(address, {
@@ -314,6 +333,11 @@ export class Hub {
   }
   stats() {
     this.services.map(a => a)
+  }
+  servicesFor(path: string, key?: string): ServiceProvider[] {
+    if (!path || !this.api.has(path)) return []
+    if (!security.allowsCall(key, path)) return []
+    return this.services.get(path)?.providers() ?? []
   }
   addServices(sender: Sender, state: State, services: string[], context: ServiceUpdateContext) {
     services.forEach(s => {
@@ -364,6 +388,16 @@ export class Hub {
 }
 
 const other = () => true
+
+function parseServiceProvidersKey(key: string): { stateKey?: string; path: string } {
+  const index = key.indexOf('\u0000')
+  if (index === -1) return { path: key }
+  const stateKey = key.slice(0, index)
+  return {
+    stateKey: stateKey.length ? stateKey : undefined,
+    path: key.slice(index + 1),
+  }
+}
 
 export interface Service {
   state: State
@@ -477,6 +511,20 @@ class Services {
       pending: this.pending.length,
       running: this.services.reduce((a, b) => a + b.sending.size + b.streams, 0),
     }
+  }
+  providers(): ServiceProvider[] {
+    return this.services
+      .map(service => ({
+        id: service.state.id,
+        name: service.state.name?.trim() || undefined,
+      }))
+      .sort((left, right) => {
+        const leftLabel = left.name ?? left.id
+        const rightLabel = right.name ?? right.id
+        const nameDiff = leftLabel.localeCompare(rightLabel)
+        if (nameDiff !== 0) return nameDiff
+        return left.id.localeCompare(right.id)
+      })
   }
   setBalancer(name: LoadBalancer.Name) {
     if (this.loadBalancer.name === name) return
