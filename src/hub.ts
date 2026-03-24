@@ -256,11 +256,12 @@ export class Hub {
       .stream('hub/whitelist/status', () => security.whitelist.subscription.makeIterator())
       .stream('hub/status', () => statusState.makeIterator())
       .stream('hub/status/badges', () => statusBadges.makeIterator())
-      .postOther(other, async ({ body, path, task, state: { key } }) => {
+      .postOther(other, async ({ body, path, context, task, state: { key } }) => {
         const service = this.services.get(path)
         if (!service) throw 'api not found'
         if (!security.allowsCall(key, path)) throw 'permissions required'
-        const s = await service.next()
+        const selected = typeof context?.service === 'string' ? service.select(context.service) : undefined
+        const s = selected ?? (await service.next())
         if (!s) throw 'api not found'
         if (task?.isCancelled) throw 'cancelled'
         service.requests += 1
@@ -276,11 +277,12 @@ export class Hub {
           service.completed(s)
         }
       })
-      .streamOther(other, async function* ({ body, path, state: { key } }) {
+      .streamOther(other, async function* ({ body, path, context, state: { key } }) {
         const service = services.get(path)
         if (!service) throw 'api not found'
         if (!security.allowsCall(key, path)) throw 'permissions required'
-        const s = await service.next()
+        const selected = typeof context?.service === 'string' ? service.select(context.service) : undefined
+        const s = selected ?? (await service.next())
         if (!s) throw 'api not found'
         service.requests += 1
         requests += 1
@@ -434,6 +436,9 @@ class Services {
         this.disabled.push(service)
       }
     }
+  }
+  select(id: string): Service | undefined {
+    return this.services.find(service => service.state.id === id)
   }
   allowKey(key: string, context: ServiceUpdateContext): number {
     let enabled = new Set<Service>()
